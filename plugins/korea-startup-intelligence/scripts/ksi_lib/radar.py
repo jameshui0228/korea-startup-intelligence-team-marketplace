@@ -136,7 +136,11 @@ def review_source(store, item):
         store.put_observation(row)
         store.db.execute("INSERT OR REPLACE INTO source_reviews VALUES (?,?,?,?)",
                          (row["id"], review["reviewed_at"], evidence_signature(row), json.dumps(review, ensure_ascii=False)))
-    return {"evidence_id": row["id"], "read_scope": scope, "reviewed_at": review["reviewed_at"]}
+    from . import blue_ocean
+    portfolio_events = blue_ocean.note_evidence_change(store, row["id"])
+    reassessment = blue_ocean.reassess_all(store, apply=True, trigger="source_review")
+    return {"evidence_id": row["id"], "read_scope": scope, "reviewed_at": review["reviewed_at"],
+            "blue_ocean_events": portfolio_events, "portfolio_reassessment": reassessment}
 
 
 def evidence_signature(row):

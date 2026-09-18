@@ -8,13 +8,13 @@
 
 사용자는 내부 CLI나 JSON을 외울 필요가 없다. Codex가 자연어 요청을 다음 흐름으로 변환한다.
 
-1. `blue-ocean prepare`: 기존 후보의 마감 작업과 덜 조사한 시장을 함께 불러온다.
+1. `blue-ocean onboard`로 첫 설정/기존 자료를 확인하고 `blue-ocean run`으로 허용된 소스를 갱신·기존 자료 승계·재평가·브리핑까지 진행한다. `prepare`도 기본적으로 실제 허용 소스를 수집한다. 오프라인 재검토에만 `--no-refresh`를 붙인다.
 2. 실제 공개 원문과 허용 자료를 읽고 관측을 저장한다.
-3. radar에서 저장한 가설은 같은 opportunity_key로 블루오션 포트폴리오에 자동 승계된다.
+3. radar에서 저장한 가설은 같은 dossier 또는 opportunity_key로 블루오션 포트폴리오에 자동 승계된다. 기회 카드가 없는 기존 dossier도 승계한다.
    기존 카드의 승계는 `blue-ocean sync`로 미리 보고 `blue-ocean sync --apply`로 적용한다.
 4. `blue-ocean save`: 독립 후보의 시장공백, 신호 상태, 반대 근거, 다음 행동을 저장한다.
-5. `blue-ocean status|next|brief`: 포트폴리오와 지금 할 일, 이전 브리핑 이후 바뀐 판단만 간결하게 보여 준다.
-6. dossier·실험 결과가 바뀌면 후보의 동적 평가와 이력에 연결한다. 단계 이동은 제안하되 자동 실행하지 않는다.
+5. `blue-ocean status|next|brief|history|portfolio`: 포트폴리오, 파레토 비교, 판단이 바뀐 이유와 지금 할 일을 보여 준다. `signals|patterns|lag|transfers|design`은 신호 군집·상시 문제·해외→한국 시차·산업 간 이전·진입 구조의 **조사 후보**를 보여 준다. `search`, `catch-up`, `metrics`로 필터·놓친 변화·실측 분모를 점검한다.
+6. dossier·실험·근거·작업 결과가 바뀌면 후보를 재평가하고 차이와 재검토 과제를 저장한다. 명시적 구조화 중단 조건이나 핵심 근거 만료는 로컬 보류·폐기 게이트를 따르며 외부 행동을 실행하지 않는다.
 7. 실제 근거가 바뀌면 후보를 수정하고 `blue-ocean transition`으로 생명주기를 이동한다.
 
 ## 블루오션의 판정
@@ -23,6 +23,7 @@
 후보마다 다음 여덟 항목을 FACT / INFERENCE / ASSUMPTION / UNKNOWN으로 분리한다.
 FACT/INFERENCE는 evidence_id뿐 아니라 supports/contradicts/context, 근거 성격, 원문 위치, 해석을 연결한다.
 판매자 설명과 제목 메타데이터를 실제 고객 행동·지출 근거로 승격하지 않는다.
+반박(`contradicts`)만 있는 주장은 고객 문제나 현재 지출을 뒷받침하는 것으로 계산하지 않는다.
 
 - problem: 실제로 반복되는 문제와 피해
 - current_spend: 현재 투입하는 돈·시간·인력
@@ -64,7 +65,7 @@ detected → watching → researching → validating → building → launched �
 
 - validating: 핵심 시장공백 근거, 독립 출처, 현재 대안, 근거 연결 dossier가 필요하다.
 - building: 사전 기준을 통과한 실제 validation 결과가 필요하다.
-- launched: 검토한 사용자 소유/허용 실행 결과가 필요하다. scaling에는 거래 또는 집계 성과 관측이 추가로 필요하다.
+- launched: 원문 검토한 사용자 소유/허용 거래 또는 실제 활성·이용 집계가 필요하다. scaling에는 서로 다른 시점의 운영 관측 2회와 유지·재구매·유료고객 결과가 필요하다.
 - parked/killed: 실패가 아니라 자본과 시간을 보호하는 의사결정이다.
 - killed 재개: reopen_condition에 해당하는 새 근거가 있어야 한다.
 
@@ -82,8 +83,8 @@ detected → watching → researching → validating → building → launched �
 5. 지금 할 행동 하나와 통과/중단 기준
 6. 보류·폐기하거나 다시 열 후보
 
-브리핑은 직전 확정 브리핑의 후보 스냅샷과 비교한다. 새 후보·판단/근거/행동 변경·삭제를 구분하고,
-변화가 없으면 그대로라고 표시한다. 이름이 비슷한 후보는 토큰 유사도를 중복 검토 경고로만 쓰며 자동 병합하지 않는다.
+브리핑은 직전 확정 브리핑의 후보 스냅샷과 비교한다. 새 후보·판단/근거/행동 변경·삭제를 구분하고 이전/이후 값과 마지막 기록된 변경 사유를 연결하며,
+변화가 없으면 그대로라고 표시한다. 고객·문제의 어휘/문자 유사도와 공통 dossier를 중복 검토 경고로만 쓰며 자동 병합하지 않는다.
 
 신호가 약하면 아이디어 수를 억지로 채우지 않는다. 다만 탐색 가설과 조사 완료 후보를 구분해 사용자가 다음 선택을 할 수 있게 한다.
 

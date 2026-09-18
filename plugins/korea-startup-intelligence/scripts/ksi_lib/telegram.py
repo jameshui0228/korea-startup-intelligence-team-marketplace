@@ -285,6 +285,81 @@ def enqueue(store):
     return {"status": "queued", "queued": count, "skipped_reasons": skipped}
 
 
+def blue_ocean_gate(store, candidate):
+    """Never alert on an unverified whitespace or a mere attention spike."""
+    from . import blue_ocean
+    assessment = blue_ocean.assess(store, candidate)
+    if candidate.get("stage") not in blue_ocean.ACTIVE_STAGES or assessment["whitespace_state"] != "investigated":
+        return False
+    if assessment["blocking_gaps"] or not {"problem", "current_spend", "supply_gap", "switching_reason"} <= set(assessment["evidence_backed_assessments"]):
+        return False
+    if not parse_date(candidate.get("updated_at")) or parse_date(candidate["updated_at"]) < now() - timedelta(hours=24):
+        return False
+    try:
+        valid_reviews(store, candidate["evidence_ids"])
+    except ValueError:
+        return False
+    return True
+
+
+def render_blue_ocean_message(store, candidate):
+    assessment = candidate["assessments"]
+    observations = {row["id"]: row for row in store.observations()}
+    urls = list(dict.fromkeys(observations[eid]["url"] for eid in candidate["evidence_ids"] if eid in observations))[:3]
+    parts = ["허구김 · 블루오션 후보 판단 변화", candidate["title"],
+             "고객: " + clean(candidate["customer"], 170),
+             "반복 문제: " + clean(candidate["problem"], 260),
+             "현재 행동·지출: " + clean(assessment["current_spend"]["conclusion"], 260),
+             "한국 대안·공백: " + clean(assessment["supply_gap"]["conclusion"], 260),
+             "전환 이유: " + clean(assessment["switching_reason"]["conclusion"], 240),
+             "지불자: " + clean(candidate["payer"], 160),
+             "다음 검증: " + clean((candidate.get("next_action") or {}).get("action"), 220),
+             "근거: " + " / ".join(urls),
+             "판단: 조사된 가설. 경쟁 부재·사업 성공·미래 유행을 증명하지 않습니다."]
+    message = "\n\n".join(parts)
+    if len(message.encode("utf-16-le")) // 2 > 4096:
+        raise ValueError("Blue-ocean alert too long")
+    return message
+
+
+def enqueue_blue_ocean_changes(store, changes):
+    cfg = ensure_radar(store)
+    keys = telegram_keys(store.workspace)
+    dest = fingerprint(keys)
+    binding = store.db.execute("SELECT * FROM telegram_binding WHERE id=1").fetchone()
+    if not cfg["telegram_enabled"] or not binding or not dest or binding["fingerprint"] != dest or binding["blocked_reason"]:
+        return {"status": "delivery_not_enabled_or_verified", "queued": 0}
+    meaningful = set()
+    for item in changes.get("added", []):
+        meaningful.add(item["candidate_id"])
+    for item in changes.get("changed", []):
+        if set(item["changed_fields"]) & {"stage", "whitespace_state", "saturation_status", "blocking_gaps", "evidence_ids", "recommended_transition"}:
+            meaningful.add(item["candidate_id"])
+    count = 0
+    for candidate in store.records("blue_ocean"):
+        if candidate["id"] not in meaningful or not blue_ocean_gate(store, candidate):
+            continue
+        if candidate.get("source_opportunity_id") and store.db.execute(
+                "SELECT 1 FROM telegram_outbox WHERE card_id=? AND status IN ('pending','sending','uncertain','sent')",
+                (candidate["source_opportunity_id"],)).fetchone():
+            continue
+        card_id = "blue-ocean-change:" + candidate["id"]
+        if store.db.execute("SELECT 1 FROM telegram_outbox WHERE card_id=? AND status IN ('sending','uncertain')", (card_id,)).fetchone():
+            continue
+        record = store.db.execute("SELECT revision FROM records WHERE kind='blue_ocean' AND id=?", (candidate["id"],)).fetchone()
+        revision = record["revision"]
+        message = render_blue_ocean_message(store, candidate)
+        ensure_private_message(store, message, keys)
+        alert_id = "alert-" + digest([card_id, revision])[:24]
+        with store.db:
+            store.db.execute("UPDATE telegram_outbox SET status='superseded' WHERE card_id=? AND card_revision<? AND status='pending'",
+                             (card_id, revision))
+            count += store.db.execute(
+                "INSERT OR IGNORE INTO telegram_outbox(id,card_id,card_revision,created_at,status,destination,message,evidence_ids) VALUES (?,?,?,?,'pending',?,?,?)",
+                (alert_id, card_id, revision, stamp(), dest, message, json.dumps(candidate["evidence_ids"]))).rowcount
+    return {"status": "queued", "queued": count, "meaningful_candidate_count": len(meaningful)}
+
+
 def enqueue_connection_check(store, confirm_chat_id):
     """Explicit, fixed-content connectivity test; never an arbitrary-message escape."""
     cfg = ensure_radar(store)
@@ -375,6 +450,18 @@ def validate_pending(store, row, cfg, keys):
             expected_id, expected_text, expected_evidence = "check-" + digest([dest, version])[:24], DELIVERY_CHECK, json.dumps([version])
         if (row["id"], row["message"], row["card_revision"], row["evidence_ids"]) != (expected_id, expected_text, 0, expected_evidence):
             return "quality_blocked"
+    elif row["card_id"].startswith("blue-ocean-change:"):
+        candidate_id = row["card_id"].removeprefix("blue-ocean-change:")
+        record = store.db.execute("SELECT revision,data FROM records WHERE kind='blue_ocean' AND id=?", (candidate_id,)).fetchone()
+        if not record or record["revision"] != row["card_revision"]:
+            return "superseded"
+        candidate = json.loads(record["data"])
+        if not blue_ocean_gate(store, candidate):
+            return "quality_blocked"
+        if json.loads(row["evidence_ids"]) != candidate["evidence_ids"] or row["message"] != render_blue_ocean_message(store, candidate):
+            return "quality_blocked"
+        if store.db.execute("SELECT 1 FROM telegram_outbox WHERE card_id=? AND id<>? AND status IN ('uncertain','sending')", (row["card_id"], row["id"])).fetchone():
+            return "prior_delivery_unresolved"
     else:
         record = store.db.execute("SELECT revision,data FROM records WHERE kind='opportunity' AND id=?", (row["card_id"],)).fetchone()
         if not record or record["revision"] != row["card_revision"]:

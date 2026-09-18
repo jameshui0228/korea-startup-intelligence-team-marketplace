@@ -197,10 +197,17 @@ def save_dossier(store, payload):
                 portfolio_sync.append(blue_ocean.sync_opportunity(store, card))
             except ValueError as exc:
                 portfolio_sync.append({"status": "not_synced", "reason": str(exc), "opportunity_id": card["id"]})
+    if not any(card.get("dossier_id") == data["id"] for card in store.records("opportunity")):
+        try:
+            portfolio_sync.append(blue_ocean.sync_dossier(store, data))
+        except ValueError as exc:
+            portfolio_sync.append({"status": "not_synced", "reason": str(exc), "dossier_id": data["id"]})
     with store.db:
         dependency_events = blue_ocean.note_dependency_change(store, data["id"], "dossier", data["id"])
+    reassessment = blue_ocean.reassess_all(store, apply=True, trigger="dossier_saved")
     return {"status": "saved", "id": data["id"], "revision": revision,
             "blue_ocean_sync": portfolio_sync, "blue_ocean_events": dependency_events,
+            "portfolio_reassessment": reassessment,
             **dossier_quality(store, data)}
 
 

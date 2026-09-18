@@ -98,6 +98,7 @@ def template(kind):
     templates = {
         "profile": {
             "weekly_hours_available": None, "weekly_budget_krw": None,
+            "monthly_hours_available": None, "monthly_budget_krw": None,
             "cash_budget_krw": None, "protected_reserve_krw": None,
             "wip_limits": {"discovery": 2, "validation": 1, "build": 1, "growth": 1},
             "max_total_active": 3, "stale_after_days": 21,
@@ -117,6 +118,7 @@ def template(kind):
         },
         "pipeline": {
             "candidate_id": None, "weekly_hours_estimate": None, "weekly_budget_krw": None,
+            "weekly_goal": None, "bottlenecks": [], "decision_due_at": None,
             "tracks": {name: {"plan_ids": [], "depends_on": DEFAULT_DEPENDENCIES[name]} for name in TRACKS},
             "expected_revision": 0,
         },
@@ -152,6 +154,12 @@ def configure(store, payload):
     store.assert_revision("founder_profile", PROFILE_ID, expected)
     hours = _number(payload.get("weekly_hours_available"), "weekly_hours_available", 1, 168)
     weekly_budget = _integer(payload.get("weekly_budget_krw"), "weekly_budget_krw", 0, 10**12)
+    monthly_hours = payload.get("monthly_hours_available")
+    monthly_budget = payload.get("monthly_budget_krw")
+    if monthly_hours is not None:
+        monthly_hours = _number(monthly_hours, "monthly_hours_available", 1, 744)
+    if monthly_budget is not None:
+        monthly_budget = _integer(monthly_budget, "monthly_budget_krw", 0, 10**13)
     cash = _integer(payload.get("cash_budget_krw"), "cash_budget_krw", 0, 10**13)
     reserve = _integer(payload.get("protected_reserve_krw"), "protected_reserve_krw", 0, 10**13)
     if reserve > cash:
@@ -174,6 +182,7 @@ def configure(store, payload):
     data = {
         "id": PROFILE_ID, "timezone": "Asia/Seoul", "weekly_hours_available": hours,
         "weekly_budget_krw": weekly_budget, "cash_budget_krw": cash,
+        "monthly_hours_available": monthly_hours, "monthly_budget_krw": monthly_budget,
         "protected_reserve_krw": reserve, "deployable_cash_krw": cash - reserve,
         "wip_limits": limits, "max_total_active": maximum,
         "stale_after_days": _integer(payload.get("stale_after_days"), "stale_after_days", 7, 365),
@@ -286,10 +295,16 @@ def save_pipeline(store, payload):
         normalized[name] = {"plan_ids": ids,
                             "depends_on": _strings(row.get("depends_on", DEFAULT_DEPENDENCIES[name]), name + ".depends_on", 0, 3)}
     _validate_dependencies(normalized)
+    due = parse_date(payload.get("decision_due_at")) if payload.get("decision_due_at") else None
+    if payload.get("decision_due_at") and not due:
+        raise ValueError("decision_due_at은 시간대가 있는 ISO 시각이어야 합니다.")
     data = {"id": record_id, "candidate_id": candidate["id"],
             "candidate_revision": _revision(store, "blue_ocean", candidate["id"]),
             "weekly_hours_estimate": _number(payload.get("weekly_hours_estimate"), "weekly_hours_estimate", 0, 168),
             "weekly_budget_krw": _integer(payload.get("weekly_budget_krw"), "weekly_budget_krw", 0, 10**12),
+            "weekly_goal": _text(payload["weekly_goal"], "weekly_goal") if payload.get("weekly_goal") else None,
+            "bottlenecks": _strings(payload.get("bottlenecks", []), "bottlenecks", 0, 20),
+            "decision_due_at": stamp(due) if due else None,
             "tracks": normalized, "updated_at": stamp(),
             "boundary": "실험 의존성과 자원 계획이며 고객 연락·MVP 제작·광고 집행을 실행하지 않습니다."}
     with store.db:
@@ -855,6 +870,7 @@ def _kpi_section(store):
 
 
 def weekly_brief(store, week_start=None, apply=False):
+    from . import venture_ops
     week = _week_start(week_start)
     reconciliation = reconcile(store, apply=apply)
     current_status = status(store)
@@ -862,6 +878,9 @@ def weekly_brief(store, week_start=None, apply=False):
     kpis = _kpi_section(store)
     data = {"generated_at": stamp(), "week_start": week, "reconciliation": reconciliation,
             "capacity": current_status["capacity_plan"], "checkin": checkin,
+            "plan_vs_actual": venture_ops.weekly_variance(store, week),
+            "task_board": venture_ops.task_board(store),
+            "failure_learning": venture_ops.failure_patterns(store),
             "candidate_operations": current_status["candidate_operations"], "kpis": kpis,
             "decisions_needed": [], "boundary": "CEO 운영 브리핑이며 고객 행동·지출·출시를 대신 실행하지 않습니다."}
     if not current_status["configured"]:
@@ -891,6 +910,9 @@ def weekly_brief(store, week_start=None, apply=False):
     lines += ["", "## KPI", ""]
     lines += [f"- {item['candidate_id']} ({item['week_start']}): " + ", ".join(f"{k}={v}" for k, v in item["values"].items())
               for item in kpis] or ["- 출시 이후 KPI 기록 없음"]
+    lines += ["", "## 계획 대비 실행", ""]
+    lines += [f"- {item['candidate_id']}: 목표 {item.get('weekly_goal') or '미설정'} · 시간 편차 {item['hours_variance']} · 예산 편차 {item['budget_variance_krw']}원"
+              for item in data["plan_vs_actual"]["items"]] or ["- 후보별 계획/실제 기록 없음"]
     lines += ["", "## 자동 운영", ""]
     lines += [f"- {item['type']}: {item['candidate_id']} · {item['reason']}" for item in reconciliation.get("actions", [])] or ["- 변경 없음"]
     lines += ["", "## CEO 결정 필요", ""]

@@ -77,13 +77,16 @@ def finish(store, packet_id, send=False):
     radar.render_cards(store)
     from . import blue_ocean
     portfolio_sync = blue_ocean.sync(store, apply=True)
+    portfolio_reassessment = blue_ocean.reassess_all(store, apply=True, trigger="radar_finish")
     portfolio_brief = blue_ocean.brief(store, commit=send)
     queued = telegram.enqueue(store)
+    blue_ocean_queued = telegram.enqueue_blue_ocean_changes(store, portfolio_brief["changes_since_previous_brief"])
     preview = telegram.deliver(store)
     # A normal invocation without --send is a side-effect-free network preview;
     # it does not finalize the cycle or consume its later send opportunity.
     if not send:
         return {"status": "ready_to_finish", "packet_id": packet_id, "queue": queued, "preview": preview,
+                "blue_ocean_queue": blue_ocean_queued, "portfolio_reassessment": portfolio_reassessment,
                 "blue_ocean_sync": portfolio_sync, "blue_ocean_changes": portfolio_brief["changes_since_previous_brief"],
                 "network_calls": 0}
     delivery = telegram.deliver(store, send=True, cycle_id=packet_id)
@@ -96,7 +99,9 @@ def finish(store, packet_id, send=False):
     result = {"status": "completed", "packet_id": packet_id, "trigger": run["trigger"],
               "automation_id": run["automation_id"], "completed_at": stamp(),
               "topics_reviewed": len(submissions), "cards_saved": sum(len(s["cards"]) for s in submissions.values()),
-              "queue": queued, "delivery": delivery, "reports_generated": len(maintenance["generated"]),
+              "queue": queued, "blue_ocean_queue": blue_ocean_queued,
+              "portfolio_reassessment": portfolio_reassessment,
+              "delivery": delivery, "reports_generated": len(maintenance["generated"]),
               "founder_operations": {"report_path": founder_operations["report_path"],
                                      "actions": founder_operations["reconciliation"].get("actions", []),
                                      "external_actions_executed": False},

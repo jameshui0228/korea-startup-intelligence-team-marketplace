@@ -11,15 +11,15 @@
 
 ## 기본 운영 순서
 
-1. `operator template profile`을 바탕으로 창업자가 확인한 주간 시간, 주간 예산, 총 현금, 보호 예비금,
+1. `operator template profile`을 바탕으로 창업자가 확인한 주간 시간, 주간 예산, 필요하면 별도 월간 시간·예산, 총 현금, 보호 예비금,
    단계별 WIP 한도와 자동 운영 정책을 `operator configure --file FILE`로 저장한다.
 2. 관심 후보마다 `operator template fit`을 작성해 역량·고객 접근·동기·시간·자본·도메인·규제 적합성을
    ALIGNED/PARTIAL/MISFIT/UNKNOWN으로 분리한다. agent_inference는 확인된 적합성으로 승격하지 않는다.
-3. `operator template pipeline`으로 인터뷰→MVP→가격→GTM 단계와 기존 validation plan을 연결한다.
+3. `operator template pipeline`으로 인터뷰→MVP→가격→GTM 단계와 기존 validation plan을 연결하고, 후보별 주간 목표·병목·결정기한을 기록한다. `operator package --id ID --apply`는 네 단계의 인터뷰 질문/수동 MVP/가격 시험/GTM 초안과 로컬 작업 4개를 생성하지만 실행하지 않는다.
 4. `operator plan`에서 이번 주 집중 후보, 시간·예산 배분, WIP 초과, 미설정 정보를 확인한다.
 5. `operator reconcile`로 변경 예정 상태를 먼저 보고, 사용자가 운영을 요청한 경우 `--apply`로 로컬 정책을 적용한다.
 6. 출시 전 KPI 정의를 등록하고 출시 이후 허용된 측정 근거로 주간 snapshot을 쌓는다.
-7. 월요일 기준 check-in과 `operator weekly`로 주간 CEO 브리핑을 만든다.
+7. 월요일 기준 check-in과 `operator weekly`로 주간 CEO 브리핑을 만든다. `operator variance`는 계획 대비 시간·지출, `operator task-board`는 실제 완료/미완료를 구분한다. `operator monthly`는 별도로 확인된 월간 시간·예산만 배분한다.
 
 ## 창업자 적합성
 
@@ -69,6 +69,9 @@ auto_advance_gated_stages는 기존 blue-ocean 근거 게이트가 이미 통과
 `operator kpi-snapshot --file FILE`은 launched/scaling 후보에만 허용한다. 월요일 week_start와 모든 KPI 값,
 사용자 소유 또는 허용된 transaction/aggregate_metric 근거가 필요하다. 같은 주차 snapshot을 덮어쓰지 않는다.
 on_target/attention/below_floor는 사전 기준 비교일 뿐 회계감사, 성장 인과, 시장 검증이 아니다.
+`operator kpi-defaults`는 activation/retention/gross margin/CAC/repeat purchase의 정의를 제공하지만 실제 분자·분모와 코호트 기간은 각 사업에서 사전 고정해야 한다.
+
+작업은 `operator task`로 계획하고 `operator task-result`로 실제 결과/비용/근거를 별도 기록한다. 고객 연락·구매 같은 외부 행동은 `operator action`의 planned→approved→executing→completed/failed/cancelled 상태를 사용하며 approved에는 사용자의 명시적 확인이 필요하다. 상태 기록은 플러그인이 실제 외부 행동을 수행했다는 뜻이 아니다. 실패 패턴은 `operator failures`로 활성 후보의 유사 문제에 경고로만 연결한다.
 
 ## 주간 check-in과 CEO 브리핑
 

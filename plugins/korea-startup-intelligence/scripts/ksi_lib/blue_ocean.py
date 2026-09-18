@@ -11,6 +11,7 @@ from datetime import timedelta
 from pathlib import Path
 
 from .model import assets, atomic_json, atomic_text, clean, digest, now, parse_date, stamp
+from . import venture_intelligence as intelligence
 
 
 ASSESSMENTS = {
@@ -155,6 +156,7 @@ def template():
                         "stop_condition": None, "due_at": None, "estimated_cost_krw": 0,
                         "external_action_required": False},
         "stop_condition": None, "reopen_condition": None, "review_after": None,
+        "stop_rules": [], "reopen_rules": [],
         "expected_revision": 0,
         "boundary": "초기 후보 입력 양식이며 경쟁사 검색 결과 0건만으로 블루오션이 되지 않습니다.",
     }
@@ -203,8 +205,8 @@ def save(store, payload):
     data = {"id": record_id, "key": key, "stage": stage, "domain_ids": domains,
             "evidence_ids": ids, "dossier_id": dossier_id,
             "managed_by": payload.get("managed_by", old.get("managed_by", "founder") if old else "founder")}
-    if data["managed_by"] not in ("founder", "radar_bridge"):
-        raise ValueError("managed_by: founder 또는 radar_bridge만 사용할 수 있습니다.")
+    if data["managed_by"] not in ("founder", "radar_bridge", "dossier_bridge"):
+        raise ValueError("managed_by: founder/radar_bridge/dossier_bridge 중 하나를 사용하세요.")
     for field in ("source_opportunity_id", "source_opportunity_revision", "source_dossier_revision"):
         value = payload.get(field, old.get(field) if old else None)
         if value is not None and ((field.endswith("_revision") and type(value) is not int) or
@@ -214,6 +216,8 @@ def save(store, payload):
     for field in ("title", "customer", "problem", "payer", "current_workaround", "why_now", "korea_gap", "smallest_wedge", "stop_condition", "reopen_condition"):
         data[field] = _text(payload.get(field), field)
     data["business_models"] = _string_list(payload.get("business_models"), "business_models", 1, 10)
+    data["stop_rules"] = intelligence.validate_condition_set(payload.get("stop_rules", old.get("stop_rules", []) if old else []), "stop_rules")
+    data["reopen_rules"] = intelligence.validate_condition_set(payload.get("reopen_rules", old.get("reopen_rules", []) if old else []), "reopen_rules")
     assessment_input = payload.get("assessments", {})
     signal_input = payload.get("signal_profile", {})
     if not isinstance(assessment_input, dict) or set(assessment_input) - set(ASSESSMENTS):
@@ -288,8 +292,11 @@ def assess(store, candidate):
     def typed_backing(name, item, customer_required=False):
         if item.get("status") not in ("FACT", "INFERENCE"):
             return False
+        # A contradiction is valuable counterevidence, not support for the
+        # positive claim. In particular it must not unlock a customer-demand
+        # gate or an alert by itself.
         links = [link for link in item.get("links", [])
-                 if link.get("relation") != "context" and link.get("evidence_id") in substantive]
+                 if link.get("relation") == "supports" and link.get("evidence_id") in substantive]
         if not links or any(link.get("evidence_id") not in current for link in links):
             return False
         if customer_required and not any(link.get("basis") in CUSTOMER_BASES for link in links):
@@ -443,7 +450,7 @@ def _opportunity_payload(store, card, existing=None):
     opportunity_revision = _record_revision(store, "opportunity", card["id"])
     dossier_revision = _record_revision(store, "dossier", dossier["id"]) if dossier else None
     return {
-        "key": card["opportunity_key"], "title": card["title"],
+        "key": existing["key"] if existing else card["opportunity_key"], "title": card["title"],
         "domain_ids": card["domain_ids"], "customer": card["target"], "problem": card["problem"],
         "payer": card.get("payer", "지불자 미확인"),
         "current_workaround": card.get("current_alternative", "현재 방식 미확인"),
@@ -462,7 +469,7 @@ def _opportunity_payload(store, card, existing=None):
         "stop_condition": experiment.get("stop_condition", "핵심 문제·지불·전환 근거가 없으면 중단"),
         "reopen_condition": "새 고객 행동·거래·규제·기술 근거가 생기면 재검토",
         "review_after": stamp(due) if active else None,
-        "expected_revision": _record_revision(store, "blue_ocean", "blue-ocean-" + card["opportunity_key"]),
+        "expected_revision": _record_revision(store, "blue_ocean", existing["id"] if existing else "blue-ocean-" + card["opportunity_key"]),
         "managed_by": "radar_bridge", "source_opportunity_id": card["id"],
         "source_opportunity_revision": opportunity_revision, "source_dossier_revision": dossier_revision,
     }
@@ -472,7 +479,12 @@ def sync_opportunity(store, card):
     """Adopt one radar hypothesis into the venture portfolio without inflating its evidence."""
     candidate_id = "blue-ocean-" + card["opportunity_key"]
     existing = next((c for c in store.records("blue_ocean") if c["id"] == candidate_id), None)
-    if existing and existing.get("managed_by", "founder") != "radar_bridge":
+    if not existing and card.get("dossier_id"):
+        existing = next((c for c in store.records("blue_ocean")
+                         if c.get("dossier_id") == card["dossier_id"]), None)
+    if existing:
+        candidate_id = existing["id"]
+    if existing and existing.get("managed_by", "founder") not in ("radar_bridge", "dossier_bridge"):
         return {"status": "founder_candidate_preserved", "candidate_id": candidate_id,
                 "next_action": "수동 후보와 레이더 카드의 차이를 검토한 뒤 명시적으로 병합"}
     payload = _opportunity_payload(store, card, existing)
@@ -482,20 +494,96 @@ def sync_opportunity(store, card):
     return {"status": "synced", "candidate_id": candidate_id, "result": save(store, payload)}
 
 
+def _dossier_payload(store, dossier, existing=None):
+    """Create an evidence-preserving candidate from a dossier without a radar card."""
+    valid_ids = {o["id"] for o in store.observations()}
+    evidence_ids = [eid for eid in dossier.get("evidence_ids", []) if eid in valid_ids]
+    if not evidence_ids:
+        raise ValueError("현재 유효한 dossier 근거가 없어 후보로 승계할 수 없습니다.")
+    findings = dossier.get("findings", {})
+    assessments = {name: _mapped_claim(dossier, dimensions, question, set(evidence_ids))
+                   for name, dimensions in DOSSIER_MAP.items()
+                   for question in [ASSESSMENTS[name]]}
+    signals = {name: _mapped_claim(dossier, dimensions, SIGNAL_DIMENSIONS[name], set(evidence_ids))
+               for name, dimensions in SIGNAL_MAP.items()}
+    alternatives = []
+    for item in dossier.get("competitors", []):
+        ids = [eid for eid in item.get("evidence_ids", []) if eid in evidence_ids]
+        alternatives.append({"kind": "indirect" if item["kind"] == "platform" else item["kind"],
+                             "name": item["name"], "gap": (item["advantage"] + " / 전환장벽: " + item["switching_barrier"])[:800],
+                             "evidence_ids": ids})
+    if not any(item["kind"] in ("manual", "status_quo") for item in alternatives):
+        workaround = findings.get("current_workaround", {}).get("conclusion", "현재 방식 추가 조사 필요")
+        alternatives.append({"kind": "status_quo", "name": "현재 방식", "gap": workaround[:800], "evidence_ids": []})
+    def conclusion(name, fallback):
+        row = findings.get(name, {})
+        return row.get("conclusion") or fallback
+    stage = existing.get("stage") if existing else ("parked" if dossier.get("decision") in ("park", "reject") else "researching")
+    active = stage in ACTIVE_STAGES
+    due = now() + timedelta(days=7)
+    return {
+        "key": dossier["key"], "title": dossier["title"], "domain_ids": dossier["domain_ids"],
+        "customer": dossier["target"], "problem": dossier["problem"],
+        "payer": conclusion("willingness_to_pay", "지불자·예산 미확인"),
+        "current_workaround": conclusion("current_workaround", "현재 방식 미확인"),
+        "why_now": conclusion("timing", "시점 근거 미확인"),
+        "korea_gap": conclusion("differentiation", conclusion("competition", "한국 공급 공백 미확인")),
+        "smallest_wedge": conclusion("mvp_feasibility", "가장 싼 수동 검증부터 설계"),
+        "business_models": ["검증 전: 서비스·운영대행·도구·유통 구조를 비교"],
+        "evidence_ids": evidence_ids, "dossier_id": dossier["id"], "stage": stage,
+        "assessments": assessments, "signal_profile": signals, "alternatives": alternatives,
+        "next_action": ({"hypothesis": "dossier의 가장 큰 근거 공백을 해소한다",
+                         "action": "고객 행동·현재 지출·국내 대안 중 미확인 우선 항목을 원문 또는 고객 자료로 검토",
+                         "pass_condition": "핵심 항목에 성격과 위치가 명시된 지지·반박 근거 연결",
+                         "stop_condition": "반복 문제 또는 전환 이유가 확인되지 않음",
+                         "due_at": stamp(due), "estimated_cost_krw": 0,
+                         "external_action_required": False} if active else None),
+        "stop_condition": "반복 문제·현재 지출·전환 이유가 실제 자료에서 확인되지 않으면 폐기",
+        "reopen_condition": "폐기 이후 새 고객 행동·거래·규제·공급 변화가 확인되면 재검토",
+        "stop_rules": existing.get("stop_rules", []) if existing else [],
+        "reopen_rules": existing.get("reopen_rules", []) if existing else [],
+        "review_after": stamp(due) if active else None,
+        "expected_revision": _record_revision(store, "blue_ocean", "blue-ocean-" + dossier["key"]),
+        "managed_by": "dossier_bridge", "source_opportunity_id": None,
+        "source_opportunity_revision": None, "source_dossier_revision": _record_revision(store, "dossier", dossier["id"]),
+    }
+
+
+def sync_dossier(store, dossier):
+    existing = next((candidate for candidate in store.records("blue_ocean")
+                     if candidate.get("dossier_id") == dossier["id"] or candidate["key"] == dossier["key"]), None)
+    if existing and existing.get("managed_by") == "founder":
+        return {"status": "founder_candidate_preserved", "candidate_id": existing["id"]}
+    payload = _dossier_payload(store, dossier, existing)
+    if existing and existing.get("source_dossier_revision") == payload["source_dossier_revision"]:
+        return {"status": "already_synced", "candidate_id": existing["id"]}
+    return {"status": "synced", "candidate_id": "blue-ocean-" + dossier["key"], "result": save(store, payload)}
+
+
 def sync(store, apply=False):
     managed = {c["key"]: c for c in store.records("blue_ocean")}
     plan = []
     if apply:
         results = []
+        linked_dossiers = {card.get("dossier_id") for card in store.records("opportunity") if card.get("dossier_id")}
         for card in reversed(store.records("opportunity")):
             try:
                 results.append({"opportunity_id": card["id"], **sync_opportunity(store, card)})
             except ValueError as exc:
                 results.append({"opportunity_id": card["id"], "status": "not_adopted", "reason": str(exc)})
+        for dossier in reversed(store.records("dossier")):
+            if dossier["id"] in linked_dossiers:
+                continue
+            try:
+                results.append({"dossier_id": dossier["id"], **sync_dossier(store, dossier)})
+            except ValueError as exc:
+                results.append({"dossier_id": dossier["id"], "status": "not_adopted", "reason": str(exc)})
         return {"status": "applied", "results": results,
                 "boundary": "원본 근거 상태를 보존한 승계이며 시장성 검증이나 자동 단계 승격이 아닙니다."}
     for card in store.records("opportunity"):
         candidate = managed.get(card["opportunity_key"])
+        if not candidate and card.get("dossier_id"):
+            candidate = next((row for row in managed.values() if row.get("dossier_id") == card["dossier_id"]), None)
         opportunity_revision = _record_revision(store, "opportunity", card["id"])
         dossier_revision = _record_revision(store, "dossier", card.get("dossier_id")) if card.get("dossier_id") else None
         if not candidate:
@@ -507,9 +595,19 @@ def sync(store, apply=False):
             action = "current"
         else:
             action = "refresh"
-        plan.append({"opportunity_id": card["id"], "candidate_id": "blue-ocean-" + card["opportunity_key"],
+        plan.append({"opportunity_id": card["id"], "candidate_id": candidate["id"] if candidate else "blue-ocean-" + card["opportunity_key"],
                      "action": action,
                      "dossier_id": card.get("dossier_id")})
+    linked_dossiers = {card.get("dossier_id") for card in store.records("opportunity") if card.get("dossier_id")}
+    for dossier in store.records("dossier"):
+        if dossier["id"] in linked_dossiers:
+            continue
+        candidate = next((row for row in store.records("blue_ocean")
+                          if row.get("dossier_id") == dossier["id"] or row["key"] == dossier["key"]), None)
+        revision = _record_revision(store, "dossier", dossier["id"])
+        action = ("adopt_dossier" if not candidate else "review_manual_merge" if candidate.get("managed_by") == "founder"
+                  else "current" if candidate.get("source_dossier_revision") == revision else "refresh_dossier")
+        plan.append({"dossier_id": dossier["id"], "candidate_id": "blue-ocean-" + dossier["key"], "action": action})
     return {"status": "preview", "items": plan, "would_write": False,
             "instruction": "blue-ocean sync --apply를 실행하면 근거를 늘리지 않고 후보를 승계합니다."}
 
@@ -534,12 +632,138 @@ def note_dependency_change(store, dossier_id, dependency_kind, dependency_id):
     return events
 
 
+def note_evidence_change(store, evidence_id):
+    """Queue candidates whose customer/problem language overlaps new evidence."""
+    observation = next((row for row in store.observations() if row["id"] == evidence_id), None)
+    if not observation:
+        return []
+    evidence_terms = intelligence.canonical_tokens(store, observation.get("topic", "") + " " + observation.get("title", ""))
+    events = []
+    for candidate in store.records("blue_ocean"):
+        candidate_terms = intelligence.canonical_tokens(store, candidate.get("customer", "") + " " + candidate.get("problem", ""))
+        linked = evidence_id in candidate.get("evidence_ids", [])
+        overlap = len(evidence_terms & candidate_terms)
+        if not linked and overlap < 2:
+            continue
+        event_time = stamp()
+        event = {"id": "blue-ocean-event-" + digest([candidate["id"], evidence_id, event_time])[:24],
+                 "event_type": "related_evidence_detected", "candidate_id": candidate["id"],
+                 "from_stage": candidate["stage"], "to_stage": candidate["stage"],
+                 "reason": "새 근거와 후보의 고객·문제 개념이 겹쳐 재검토 대기",
+                 "evidence_ids": [evidence_id], "changed_dimensions": ["related_evidence"],
+                 "semantic_overlap_tokens": overlap, "recorded_at": event_time,
+                 "external_action_executed": False}
+        task = {"id": "blue-ocean-review-" + digest([candidate["id"], evidence_id])[:24],
+                "candidate_id": candidate["id"], "reason": event["reason"], "evidence_ids": [evidence_id],
+                "status": "pending", "created_at": event_time, "due_at": stamp(now() + timedelta(days=3))}
+        with store.db:
+            store.record("blue_ocean_event", event)
+            store.record("blue_ocean_review_task", task)
+        events.append(event["id"])
+    return events
+
+
+def reassess_all(store, apply=False, trigger="manual"):
+    """Compare durable assessment snapshots and queue/apply safe lifecycle changes."""
+    actions, changes = [], []
+    snapshots = {row["candidate_id"]: row for row in store.records("blue_ocean_assessment")}
+    for candidate in list(store.records("blue_ocean")):
+        current = assess(store, candidate)
+        stop_match = intelligence.evaluate_conditions(store, candidate, candidate.get("stop_rules", []))
+        reopen_match = intelligence.evaluate_conditions(store, candidate, candidate.get("reopen_rules", []))
+        snapshot = {"id": "blue-ocean-assessment-" + candidate["key"], "candidate_id": candidate["id"],
+                    "candidate_revision": _record_revision(store, "blue_ocean", candidate["id"]),
+                    "stage": candidate["stage"], "whitespace_state": current["whitespace_state"],
+                    "saturation_status": intelligence.saturation(store, candidate)["status"],
+                    "blocking_gaps": current["blocking_gaps"],
+                    "recommended_transition": current["recommended_transition"],
+                    "evidence_ids": candidate.get("evidence_ids", []),
+                    "stop_condition_match": stop_match, "reopen_condition_match": reopen_match}
+        previous = snapshots.get(candidate["id"])
+        comparable_previous = {k: v for k, v in (previous or {}).items() if k not in ("id", "evaluated_at")}
+        comparable_current = {k: v for k, v in snapshot.items() if k != "id"}
+        changed_fields = sorted(k for k in comparable_current if comparable_previous.get(k) != comparable_current.get(k))
+        if changed_fields:
+            snapshot["evaluated_at"] = stamp()
+            reason_parts = []
+            if previous:
+                added = sorted(set(snapshot["evidence_ids"]) - set(previous.get("evidence_ids", [])))
+                removed = sorted(set(previous.get("evidence_ids", [])) - set(snapshot["evidence_ids"]))
+                if added:
+                    reason_parts.append("근거 추가:" + ",".join(added))
+                if removed:
+                    reason_parts.append("근거 만료/제거:" + ",".join(removed))
+                if previous.get("blocking_gaps") != snapshot["blocking_gaps"]:
+                    reason_parts.append("차단 공백 변경")
+            else:
+                reason_parts.append("최초 평가 기준선")
+            event = {"id": "blue-ocean-event-" + digest([candidate["id"], snapshot["evaluated_at"], changed_fields])[:24],
+                     "event_type": "assessment_changed", "candidate_id": candidate["id"],
+                     "from_stage": previous.get("stage") if previous else candidate["stage"], "to_stage": candidate["stage"],
+                     "reason": "; ".join(reason_parts), "changed_dimensions": changed_fields,
+                     "before": comparable_previous or None, "after": comparable_current,
+                     "evidence_ids": candidate.get("evidence_ids", []), "recorded_at": snapshot["evaluated_at"],
+                     "external_action_executed": False}
+            if apply:
+                with store.db:
+                    store.record("blue_ocean_assessment", snapshot,
+                                 _record_revision(store, "blue_ocean_assessment", snapshot["id"]))
+                    store.record("blue_ocean_event", event)
+            changes.append({"candidate_id": candidate["id"], "changed_fields": changed_fields, "reason": event["reason"]})
+        action = None
+        if stop_match["matched"] and candidate["stage"] in ACTIVE_STAGES:
+            action = {"candidate_id": candidate["id"], "type": "kill", "reason": "structured_stop_condition_matched"}
+        elif "expired_or_missing_evidence" in current["blocking_gaps"] and candidate["stage"] in ("validating", "building", "launched", "scaling"):
+            action = {"candidate_id": candidate["id"], "type": "park", "reason": "critical_evidence_expired"}
+        elif reopen_match["matched"] and candidate["stage"] == "killed":
+            action = {"candidate_id": candidate["id"], "type": "reopen_review", "reason": "structured_reopen_condition_matched"}
+        elif snapshot["saturation_status"] == "saturation_risk" and candidate["stage"] in ACTIVE_STAGES and \
+                (not previous or previous.get("saturation_status") != "saturation_risk"):
+            action = {"candidate_id": candidate["id"], "type": "saturation_review", "reason": "observed_competitor_saturation_risk"}
+        if action:
+            task = {"id": "blue-ocean-review-" + digest([candidate["id"], action["type"], action["reason"]])[:24],
+                    "candidate_id": candidate["id"], "reason": action["reason"], "status": "pending",
+                    "created_at": stamp(), "due_at": stamp(now() + timedelta(days=1)), "evidence_ids": []}
+            if apply and not _record_revision(store, "blue_ocean_review_task", task["id"]):
+                with store.db:
+                    store.record("blue_ocean_review_task", task)
+            if apply and action["type"] in ("kill", "park"):
+                result = transition(store, {"candidate_id": candidate["id"],
+                    "to_stage": "killed" if action["type"] == "kill" else "parked",
+                    "reason": "automatic_reassessment:" + action["reason"], "evidence_ids": [],
+                    "expected_revision": _record_revision(store, "blue_ocean", candidate["id"])})
+                action["applied"] = True
+                action["result"] = result["status"]
+            else:
+                action["applied"] = False
+            actions.append(action)
+    return {"trigger": trigger, "applied": apply, "changes": changes, "actions": actions,
+            "review_queue": store.records("blue_ocean_review_task"),
+            "boundary": "근거 기반 로컬 재평가입니다. 외부 행동은 실행하지 않으며 폐기 재개는 창업자 확인이 필요합니다."}
+
+
+def history(store, candidate_id):
+    candidate = next((row for row in store.records("blue_ocean") if row["id"] == candidate_id or row["key"] == candidate_id), None)
+    if not candidate:
+        raise ValueError("블루오션 후보를 찾을 수 없습니다.")
+    events = sorted((row for row in store.records("blue_ocean_event") if row.get("candidate_id") == candidate["id"]),
+                    key=lambda row: row.get("recorded_at", ""))
+    return {"candidate_id": candidate["id"], "events": events,
+            "causal_changes": [{"at": row.get("recorded_at"), "reason": row.get("reason"),
+                                "changed_dimensions": row.get("changed_dimensions", []),
+                                "before": row.get("before"), "after": row.get("after")}
+                               for row in events if row.get("event_type") in ("assessment_changed", "dependency_change", "reassessed")],
+            "boundary": "저장된 사건의 전후 비교이며 저장되지 않은 외부 원인을 추정하지 않습니다."}
+
+
 def _tokens(candidate):
     text = " ".join(str(candidate.get(k, "")) for k in ("customer", "problem", "current_workaround", "smallest_wedge"))
     return set(re.findall(r"[a-z0-9가-힣]{2,}", text.lower()))
 
 
-def duplicate_warnings(candidates):
+def duplicate_warnings(candidates, store=None):
+    if store is not None:
+        return intelligence.semantic_duplicate_warnings(store, candidates)
     warnings = []
     for index, left in enumerate(candidates):
         a = _tokens(left)
@@ -563,8 +787,10 @@ def founder_context(store):
             key, value = line.split(":", 1)
             values[key.strip("# ")] = value.strip()
     unknown = [key for key, value in values.items() if not value or value == "미확인"]
-    return {"values": values, "unknown_fields": unknown,
-            "fit_scored": False, "boundary": "창업자 적합성은 확인된 컨텍스트만 설명하며 성공확률 점수가 아닙니다."}
+    profile = next(iter(store.records("founder_profile")), None)
+    return {"values": values, "unknown_fields": unknown, "structured_profile": profile,
+            "fit_scored": bool(profile),
+            "boundary": "FOUNDER_CONTEXT와 확인된 운영 프로필을 함께 보여 주며 성공확률 점수가 아닙니다."}
 
 
 def status(store, candidate_id=None):
@@ -577,7 +803,7 @@ def status(store, candidate_id=None):
     counts = {stage: sum(c["candidate"]["stage"] == stage for c in rows) for stage in STAGES}
     return {"candidates": rows, "counts": counts,
             "due": [c["candidate"]["id"] for c in rows if c["assessment"]["review_overdue"]],
-            "portfolio_size": len(rows), "duplicate_warnings": duplicate_warnings(candidates),
+            "portfolio_size": len(rows), "duplicate_warnings": duplicate_warnings(candidates, store),
             "founder_context": founder_context(store), "automatic_external_actions": False}
 
 
@@ -586,10 +812,12 @@ def next_actions(store, limit=10):
         raise ValueError("limit: 1~50 범위가 필요합니다.")
     rows = status(store)["candidates"]
     rows = [r for r in rows if r["candidate"]["stage"] in ACTIVE_STAGES]
-    rows.sort(key=lambda r: (not r["assessment"]["review_overdue"],
+    decisions = {row["candidate_id"]: row for row in intelligence.portfolio_decisions(store, assess)["items"]}
+    rows.sort(key=lambda r: (bool(decisions[r["candidate"]["id"]]["dominated_by"]),
+                             not r["assessment"]["review_overdue"],
                              r["assessment"]["recommended_transition"] is None,
-                             parse_date(r["candidate"]["next_action"]["due_at"]),
-                             len(r["assessment"]["blocking_gaps"])))
+                             -sum(v for v in decisions[r["candidate"]["id"]]["decision_vector"].values() if v is not None),
+                             parse_date(r["candidate"]["next_action"]["due_at"])))
     return {"items": [{"candidate_id": r["candidate"]["id"], "title": r["candidate"]["title"],
                         "stage": r["candidate"]["stage"], "whitespace_state": r["assessment"]["whitespace_state"],
                         "next_action": r["candidate"]["next_action"],
@@ -597,10 +825,11 @@ def next_actions(store, limit=10):
                         "priority_reason": ("재검토 기한 초과" if r["assessment"]["review_overdue"] else
                                             "단계 이동 조건 충족" if r["assessment"]["recommended_transition"] else
                                             "가장 가까운 사전 기한"),
-                        "blocking_gaps": r["assessment"]["blocking_gaps"][:5]}
+                        "blocking_gaps": r["assessment"]["blocking_gaps"][:5],
+                        "decision_support": decisions[r["candidate"]["id"]]}
                        for r in rows[:limit]],
             "founder_context": founder_context(store),
-            "ordering": "기한 초과→단계 이동 가능→가까운 기한→근거 공백 수. 성공 가능성 순위가 아닙니다."}
+            "ordering": "파레토 비지배→기한 초과→단계 이동 가능→사업가치·창업자 적합성·저비용 선택가치·접근성→가까운 기한. 성공 가능성 순위가 아닙니다."}
 
 
 def transition(store, payload):
@@ -623,11 +852,23 @@ def transition(store, payload):
     observations = {o["id"]: o for o in store.observations()}
     execution = [observations[i] for i in ids if i in observations and
                  observations[i].get("collection_basis") in ("user_owned", "authorized_export") and
-                 observations[i].get("kind") in ("manual_evidence", "transaction", "aggregate_metric")]
-    if target == "launched" and not execution:
-        raise ValueError("출시 상태에는 검토한 사용자 소유/허용 실행 결과 근거가 필요합니다.")
-    if target == "scaling" and not any(o.get("kind") in ("transaction", "aggregate_metric") for o in execution):
-        raise ValueError("확장 상태에는 거래 또는 집계 성과 관측 근거가 필요합니다.")
+                 observations[i].get("kind") in ("transaction", "aggregate_metric")]
+    if target in ("launched", "scaling") and execution:
+        from .radar import ensure_radar, valid_reviews
+        ensure_radar(store)
+        reviews = valid_reviews(store, [o["id"] for o in execution])
+        if any(review["read_scope"] == "metadata_only" for review in reviews):
+            raise ValueError("운영 결과는 제목·메타데이터가 아닌 실제 자료 검토가 필요합니다.")
+    if target == "launched" and not any(o.get("kind") == "transaction" or
+                                        any(k in o.get("metrics", {}) for k in ("active_users", "activated_users", "transactions"))
+                                        for o in execution):
+        raise ValueError("출시 상태에는 사용자 소유/허용 거래 또는 실제 활성·이용 집계가 필요합니다. 계획·제품 설명만으로는 이동할 수 없습니다.")
+    if target == "scaling":
+        dated = {parse_date(o.get("event_at")).date() for o in execution if parse_date(o.get("event_at"))}
+        outcomes = any(any(k in o.get("metrics", {}) for k in ("retention_rate", "repeat_purchase_rate", "paying_customers"))
+                       for o in execution)
+        if len(dated) < 2 or not outcomes:
+            raise ValueError("확장 상태에는 서로 다른 시점 2회 이상 운영 관측과 유지·재구매·유료고객 결과가 필요합니다.")
     if current["stage"] == "killed" and not ids:
         raise ValueError("폐기 후보를 다시 열려면 reopen_condition에 해당하는 새 근거가 필요합니다.")
     updated = dict(current)
@@ -657,16 +898,25 @@ def transition(store, payload):
             "assessment": assess(store, updated)}
 
 
-def prepare(store, limit=6):
+def prepare(store, limit=6, no_refresh=False, max_requests=None, sector_batch=None):
     if type(limit) is not int or not 1 <= limit <= 12:
         raise ValueError("limit: 1~12 범위가 필요합니다.")
     from .research import research_plan
+    from .engine import refresh
+    collection = None
+    if not no_refresh:
+        collection = refresh(store, budget=max_requests if max_requests is not None else min(store.config.get("max_requests", 30), 18),
+                             sector_batch=sector_batch if sector_batch is not None else min(limit, 8))
+    adoption_applied = sync(store, apply=True)
+    reassessment = reassess_all(store, apply=True, trigger="blue_ocean_prepare")
     plan = research_plan(store, limit)
     adoption = sync(store, apply=False)
     unmanaged = [item for item in adoption["items"] if item["action"] == "adopt"]
     return {"mode": "blue_ocean_discovery", "api_key_required": False,
+            "collection": collection or {"status": "not_refreshed", "requests_made": 0},
             "existing_portfolio": status(store), "unmanaged_opportunities": unmanaged[:12],
             "portfolio_sync": adoption,
+            "portfolio_sync_applied": adoption_applied, "automatic_reassessment": reassessment,
             "research_tasks": plan.get("tasks", []),
             "search_lanes": [
                 "고객 행동·반복 수작업·현재 지출", "검색·커뮤니티·리뷰의 약한 신호",
@@ -694,6 +944,7 @@ def brief(store, commit=True):
                 "next_action": candidate.get("next_action")}
         snapshots[candidate["id"]] = {"title": candidate["title"], "stage": candidate["stage"],
             "whitespace_state": assessment["whitespace_state"], "blocking_gaps": assessment["blocking_gaps"],
+            "saturation_status": intelligence.saturation(store, candidate)["status"],
             "recommended_transition": assessment["recommended_transition"], "next_action": candidate.get("next_action"),
             "evidence_ids": candidate.get("evidence_ids", []),
             "source_opportunity_revision": candidate.get("source_opportunity_revision"),
@@ -711,12 +962,20 @@ def brief(store, commit=True):
         if candidate_id not in old_snapshots:
             changes["added"].append({"candidate_id": candidate_id, "title": current["title"]})
             continue
-        fields = [field for field in ("stage", "whitespace_state", "blocking_gaps", "recommended_transition",
+        fields = [field for field in ("stage", "whitespace_state", "saturation_status", "blocking_gaps", "recommended_transition",
                                       "next_action", "evidence_ids", "source_opportunity_revision", "source_dossier_revision")
                   if current.get(field) != old_snapshots[candidate_id].get(field)]
         if fields:
+            causal_events = [event for event in store.records("blue_ocean_event")
+                             if event.get("candidate_id") == candidate_id and
+                             event.get("event_type") in ("assessment_changed", "dependency_change", "reassessed")]
+            causal_events.sort(key=lambda event: event.get("recorded_at", ""), reverse=True)
             changes["changed"].append({"candidate_id": candidate_id, "title": current["title"],
-                                       "changed_fields": fields})
+                                       "changed_fields": fields,
+                                       "before": {field: old_snapshots[candidate_id].get(field) for field in fields},
+                                       "after": {field: current.get(field) for field in fields},
+                                       "latest_recorded_reason": causal_events[0].get("reason") if causal_events else None,
+                                       "causal_event_id": causal_events[0].get("id") if causal_events else None})
         else:
             changes["unchanged_count"] += 1
     for candidate_id, old in old_snapshots.items():
@@ -734,7 +993,8 @@ def brief(store, commit=True):
              f"관리 후보 {data['portfolio_size']}개. 경쟁사가 없다는 이유만으로 블루오션으로 분류하지 않습니다.", ""]
     lines += ["## 이전 브리핑 이후 변화", ""]
     lines += [f"- 새 후보: {item['title']}" for item in changes["added"]]
-    lines += [f"- 판단 변경: {item['title']} ({', '.join(item['changed_fields'])})" for item in changes["changed"]]
+    lines += [f"- 판단 변경: {item['title']} ({', '.join(item['changed_fields'])}) · 기록된 이유: {item['latest_recorded_reason'] or '미기록'}"
+              for item in changes["changed"]]
     lines += [f"- 목록에서 사라짐: {item['title'] or item['candidate_id']}" for item in changes["removed"]]
     if not changes["added"] and not changes["changed"] and not changes["removed"]:
         lines += ["- 의미 있는 후보 판단 변화 없음"]

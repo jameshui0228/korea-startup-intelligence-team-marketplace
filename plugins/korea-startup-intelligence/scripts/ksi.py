@@ -12,7 +12,7 @@ from ksi_lib.model import (REQUIRED, Store, assets, atomic_json, canonical_url, 
                            init_workspace, now, observation, parse_date, stamp, validate_record)
 from ksi_lib import (radar, telegram, research, grants, operations, venture, validation,
                      agenda, application, market, workbench, competition, trend_forecast,
-                     blue_ocean, founder_ops)
+                     blue_ocean, founder_ops, venture_intelligence, venture_ops, signal_intake)
 
 
 def edit_payload(store, path, kind, prefix):
@@ -97,7 +97,10 @@ def import_evidence(store, path):
     with store.db:
         for row in rows:
             store.put_observation(row)
-    return {"imported": len(rows), "ids": [r["id"] for r in rows]}
+    events = [event for row in rows for event in blue_ocean.note_evidence_change(store, row["id"])]
+    reassessment = blue_ocean.reassess_all(store, apply=True, trigger="evidence_import")
+    return {"imported": len(rows), "ids": [r["id"] for r in rows],
+            "blue_ocean_events": events, "portfolio_reassessment": reassessment}
 
 
 def resolve_forecast(store, record_id, outcome, evidence_id):
@@ -159,16 +162,75 @@ def run(args):
             return blue_ocean.status(store, args.id)
         if args.command == "blue-ocean" and args.action == "next":
             return blue_ocean.next_actions(store, args.limit)
+        if args.command == "blue-ocean" and args.action == "history":
+            return blue_ocean.history(store, args.id)
+        if args.command == "blue-ocean" and args.action == "signals":
+            return venture_intelligence.signal_graph(store)
+        if args.command == "blue-ocean" and args.action == "patterns":
+            return venture_intelligence.opportunity_patterns(store)
+        if args.command == "blue-ocean" and args.action == "lag":
+            return venture_intelligence.overseas_korea_lag(store)
+        if args.command == "blue-ocean" and args.action == "transfers":
+            return venture_intelligence.cross_industry_transfers(store)
+        if args.command == "blue-ocean" and args.action == "portfolio":
+            return venture_intelligence.portfolio_decisions(store, blue_ocean.assess)
+        if args.command == "blue-ocean" and args.action == "design":
+            candidate = next((row for row in store.records("blue_ocean")
+                              if row["id"] == args.id or row["key"] == args.id), None)
+            if not candidate:
+                raise ValueError("블루오션 후보를 찾을 수 없습니다.")
+            return venture_intelligence.entry_dynamics(store, candidate)
+        if args.command == "blue-ocean" and args.action == "sources":
+            return venture_intelligence.source_capabilities(store)
+        if args.command == "blue-ocean" and args.action == "metrics":
+            return venture_intelligence.performance_metrics(store)
+        if args.command == "blue-ocean" and args.action == "search":
+            return {"items": venture_intelligence.filter_candidates(store, args.query, args.domain,
+                        args.stage, args.max_budget, args.due_before)}
+        if args.command == "blue-ocean" and args.action == "catch-up":
+            return venture_intelligence.catch_up(store, args.since)
+        if args.command == "blue-ocean" and args.action == "onboard":
+            portfolio = blue_ocean.status(store)
+            adoption = blue_ocean.sync(store)
+            profile = next(iter(store.records("founder_profile")), None)
+            next_step = ("기존 dossier/레이더 근거를 blue-ocean sync --apply로 보존 승계"
+                         if any(row["action"] in ("adopt", "adopt_dossier") for row in adoption["items"]) else
+                         "blue-ocean run으로 허용 최신 소스를 수집하고 중요한 원문을 검토")
+            return {"candidate_count": portfolio["portfolio_size"],
+                    "unmanaged_research_count": sum(row["action"] in ("adopt", "adopt_dossier") for row in adoption["items"]),
+                    "founder_profile_configured": profile is not None,
+                    "first_question": "이번 달 직접 접근 가능한 고객 집단은 누구인가요?" if not profile else None,
+                    "next_step": next_step,
+                    "boundary": "초기 안내이며 자동 아이디어 생성·검증 또는 API 연결 성공이 아닙니다."}
         if args.command == "operator" and args.action == "template":
-            return founder_ops.template(args.kind)
+            return venture_ops.template(args.kind) if args.kind in ("task", "task-result", "action", "action-transition") else founder_ops.template(args.kind)
         if args.command == "operator" and args.action == "status":
             return founder_ops.status(store)
         if args.command == "operator" and args.action == "plan":
             return founder_ops.capacity_plan(store)
+        if args.command == "operator" and args.action == "task-board":
+            return venture_ops.task_board(store, args.id)
+        if args.command == "operator" and args.action == "monthly":
+            return venture_ops.monthly_plan(store, args.month)
+        if args.command == "operator" and args.action == "variance":
+            return venture_ops.weekly_variance(store, args.week_start)
+        if args.command == "operator" and args.action == "failures":
+            return venture_ops.failure_patterns(store)
+        if args.command == "operator" and args.action == "kpi-defaults":
+            return venture_ops.standard_kpis()
+        if args.command == "operator" and args.action == "overview":
+            return venture_ops.status(store)
+        if args.command == "signal" and args.action in ("template", "capabilities"):
+            return signal_intake.template() if args.action == "template" else signal_intake.capabilities(store)
         with locked(store):
             if args.command == "blue-ocean":
                 if args.action == "prepare":
-                    return blue_ocean.prepare(store, args.limit)
+                    return blue_ocean.prepare(store, args.limit, args.no_refresh, args.max_requests, args.sector_batch)
+                if args.action == "run":
+                    prepared = blue_ocean.prepare(store, args.limit, args.no_refresh, args.max_requests, args.sector_batch)
+                    report = blue_ocean.brief(store)
+                    return {"discovery": prepared, "brief": report, "operator": venture_ops.status(store),
+                            "boundary": "실제 원문 검토·아이디어 판단은 Codex가 이어서 수행해야 합니다. 명령 자체는 자동 추론 모델이 아닙니다."}
                 if args.action == "template":
                     return blue_ocean.template()
                 if args.action == "save":
@@ -183,7 +245,19 @@ def run(args):
                     return blue_ocean.brief(store)
                 if args.action == "sync":
                     return blue_ocean.sync(store, args.apply)
+                if args.action == "reassess":
+                    return blue_ocean.reassess_all(store, apply=args.apply)
             if args.command == "operator":
+                if args.action == "task":
+                    return venture_ops.save_task(store, json.loads(Path(args.file).read_text()))
+                if args.action == "task-result":
+                    return venture_ops.record_task_result(store, json.loads(Path(args.file).read_text()))
+                if args.action == "action":
+                    return venture_ops.save_action(store, json.loads(Path(args.file).read_text()))
+                if args.action == "action-transition":
+                    return venture_ops.transition_action(store, json.loads(Path(args.file).read_text()))
+                if args.action == "package":
+                    return venture_ops.execution_package(store, args.id, args.apply)
                 if args.action == "configure":
                     return founder_ops.configure(store, json.loads(Path(args.file).read_text()))
                 if args.action == "fit":
@@ -202,6 +276,8 @@ def run(args):
                     return founder_ops.reconcile(store, args.apply)
                 if args.action == "weekly":
                     return founder_ops.weekly_brief(store, args.week_start, args.apply)
+            if args.command == "signal" and args.action == "import":
+                return signal_intake.import_signal(store, json.loads(Path(args.file).read_text()))
             if args.command == 'workbench':
                 return workbench.execute(store, args.action, args)
             if args.command == "application":
@@ -398,8 +474,17 @@ def main():
     s.add_argument("--limit", type=int, default=20)
     s = sub.add_parser("blue-ocean", help="Discover and manage evidence-linked Korean market whitespace")
     actions = s.add_subparsers(dest="action", required=True)
-    r = actions.add_parser("prepare", help="Prepare broad discovery and follow-up research without requiring API keys")
+    r = actions.add_parser("prepare", help="Refresh permitted sources, adopt research and prepare discovery")
     r.add_argument("--limit", type=int, default=6)
+    r.add_argument("--no-refresh", action="store_true", help="Use stored evidence only")
+    r.add_argument("--max-requests", type=int)
+    r.add_argument("--sector-batch", type=int)
+    r = actions.add_parser("run", help="One command for collection, portfolio sync, reassessment and brief")
+    r.add_argument("--limit", type=int, default=6)
+    r.add_argument("--no-refresh", action="store_true")
+    r.add_argument("--max-requests", type=int)
+    r.add_argument("--sector-batch", type=int)
+    actions.add_parser("onboard", help="Start the guided no-key founder workflow")
     actions.add_parser("template", help="Return the candidate contract Codex fills for the user")
     r = actions.add_parser("save", help="Save or revise an evidence-linked market-whitespace candidate")
     r.add_argument("--file", required=True)
@@ -412,20 +497,57 @@ def main():
     actions.add_parser("brief", help="Write a concise personal founder brief from the current portfolio")
     r = actions.add_parser("sync", help="Preview or apply evidence-preserving adoption of existing radar hypotheses")
     r.add_argument("--apply", action="store_true", help="Write the previewed portfolio adoption; never advances stages automatically")
+    r = actions.add_parser("reassess", help="Compare evidence and decision changes; --apply records the review queue")
+    r.add_argument("--apply", action="store_true")
+    r = actions.add_parser("history", help="Explain why one candidate changed")
+    r.add_argument("--id", required=True)
+    r = actions.add_parser("design", help="Compare business structures, channels, cost and large-company entry risk")
+    r.add_argument("--id", required=True)
+    for name in ("signals", "patterns", "lag", "transfers", "portfolio", "sources", "metrics"):
+        actions.add_parser(name)
+    r = actions.add_parser("search", help="Filter candidates by customer/problem, field, stage, budget or deadline")
+    r.add_argument("--query")
+    r.add_argument("--domain", action="append")
+    r.add_argument("--stage", action="append", choices=blue_ocean.STAGES)
+    r.add_argument("--max-budget", type=int)
+    r.add_argument("--due-before")
+    r = actions.add_parser("catch-up", help="Show saved changes since the last visit")
+    r.add_argument("--since", required=True)
     s = sub.add_parser("operator", help="Personal founder fit, resources, WIP, experiment pipeline, KPI and CEO briefing")
     actions = s.add_subparsers(dest="action", required=True)
     r = actions.add_parser("template")
-    r.add_argument("kind", choices=("profile", "fit", "pipeline", "kpi-plan", "kpi-snapshot", "checkin", "reopen-signal"))
+    r.add_argument("kind", choices=("profile", "fit", "pipeline", "kpi-plan", "kpi-snapshot", "checkin", "reopen-signal",
+                                    "task", "task-result", "action", "action-transition"))
     for name in ("configure", "fit", "pipeline", "kpi-plan", "kpi-snapshot", "checkin", "reopen-signal"):
+        r = actions.add_parser(name)
+        r.add_argument("--file", required=True)
+    for name in ("task", "task-result", "action", "action-transition"):
         r = actions.add_parser(name)
         r.add_argument("--file", required=True)
     actions.add_parser("status")
     actions.add_parser("plan")
+    r = actions.add_parser("task-board")
+    r.add_argument("--id")
+    r = actions.add_parser("package", help="Create interview, MVP, pricing and GTM plan for a candidate")
+    r.add_argument("--id", required=True)
+    r.add_argument("--apply", action="store_true", help="Save local package and tasks; no external action")
+    r = actions.add_parser("monthly")
+    r.add_argument("--month")
+    r = actions.add_parser("variance")
+    r.add_argument("--week-start")
+    for name in ("failures", "kpi-defaults", "overview"):
+        actions.add_parser(name)
     r = actions.add_parser("reconcile", help="Preview local lifecycle changes; --apply writes only local state")
     r.add_argument("--apply", action="store_true")
     r = actions.add_parser("weekly", help="Generate weekly CEO brief and optionally apply local operating policy")
     r.add_argument("--week-start", help="KST Monday in YYYY-MM-DD; defaults to the current week")
     r.add_argument("--apply", action="store_true")
+    s = sub.add_parser("signal", help="Review and import authorized SNS/industry source signals without direct API access")
+    actions = s.add_subparsers(dest="action", required=True)
+    actions.add_parser("template")
+    actions.add_parser("capabilities")
+    r = actions.add_parser("import")
+    r.add_argument("--file", required=True)
     s = sub.add_parser("refresh")
     s.add_argument("--topic", action="append")
     s.add_argument("--source", action="append")
@@ -436,7 +558,9 @@ def main():
     s.add_argument("kind", choices=["evidence", "trend", "resolution", "opportunity", "blue_ocean", "blue_ocean_event", "dossier", "grant",
                                     "venture_review", "validation_plan", "validation_result", "research_run", "research_receipt", "application",
                                     "founder_profile", "founder_fit", "founder_pipeline", "founder_lifecycle",
-                                    "founder_kpi_plan", "founder_kpi_snapshot", "founder_checkin", "founder_reopen_signal"] + list(REQUIRED))
+                                    "founder_kpi_plan", "founder_kpi_snapshot", "founder_checkin", "founder_reopen_signal",
+                                    "founder_task", "founder_task_result", "founder_action", "founder_action_event",
+                                    "founder_execution_package", "blue_ocean_assessment", "blue_ocean_review_task"] + list(REQUIRED))
     s.add_argument("--topic")
     s.add_argument("--limit", type=int, default=20)
     s = sub.add_parser("record")

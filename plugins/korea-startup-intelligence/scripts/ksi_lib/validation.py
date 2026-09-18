@@ -84,8 +84,9 @@ def plan(store, payload):
         store.record("validation_plan", data)
         from . import blue_ocean
         portfolio_events = blue_ocean.note_dependency_change(store, data["dossier_id"], "validation_plan", data["id"])
+    reassessment = blue_ocean.reassess_all(store, apply=True, trigger="validation_plan")
     return {"status": "registered_not_executed", "id": data["id"], "record": data,
-            "blue_ocean_events": portfolio_events,
+            "blue_ocean_events": portfolio_events, "portfolio_reassessment": reassessment,
             "boundary": "Budget is a plan, not spending authority; registration does not contact customers"}
 
 
@@ -152,8 +153,9 @@ def qualitative_plan(store, payload):
         store.record("validation_plan", data)
         from . import blue_ocean
         portfolio_events = blue_ocean.note_dependency_change(store, data["dossier_id"], "validation_plan", data["id"])
+    reassessment = blue_ocean.reassess_all(store, apply=True, trigger="qualitative_validation_plan")
     return {"status": "registered_not_executed", "id": data["id"], "record": data,
-            "blue_ocean_events": portfolio_events,
+            "blue_ocean_events": portfolio_events, "portfolio_reassessment": reassessment,
             "boundary": "사전 코딩 규칙이며 인터뷰 실행·대표성·통계적 유의성을 뜻하지 않습니다."}
 
 
@@ -245,8 +247,9 @@ def qualitative_result(store, payload):
         store.record("validation_result", data)
         from . import blue_ocean
         portfolio_events = blue_ocean.note_dependency_change(store, data["dossier_id"], "validation_result", data["id"])
+    reassessment = blue_ocean.reassess_all(store, apply=True, trigger="qualitative_validation_result")
     return {"status": "recorded", "id": data["id"], "record": data,
-            "blue_ocean_events": portfolio_events}
+            "blue_ocean_events": portfolio_events, "portfolio_reassessment": reassessment}
 
 
 def outcome(metric, numerator, denominator, issues):
@@ -333,8 +336,9 @@ def result(store, payload):
         store.record("validation_result", data)
         from . import blue_ocean
         portfolio_events = blue_ocean.note_dependency_change(store, data["dossier_id"], "validation_result", data["id"])
+    reassessment = blue_ocean.reassess_all(store, apply=True, trigger="validation_result")
     return {"status": "recorded", "id": data["id"], "record": data,
-            "blue_ocean_events": portfolio_events}
+            "blue_ocean_events": portfolio_events, "portfolio_reassessment": reassessment}
 
 
 def status(store, dossier_id=None):

@@ -10,7 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from ksi_lib import blue_ocean
+from ksi_lib import blue_ocean, radar
 from ksi_lib.model import Store, init_workspace, now, observation, stamp
 
 
@@ -82,6 +82,26 @@ class BlueOceanTest(unittest.TestCase):
                                   for key in ("problem", "current_spend", "supply_gap")}
         result = blue_ocean.save(self.store, payload)
         self.assertEqual(result["assessment"]["evidence_backed_assessments"], [])
+        self.assertEqual(result["assessment"]["whitespace_state"], "unproven")
+
+    def test_contradiction_is_not_positive_evidence_for_customer_problem(self):
+        radar.review_source(self.store, {
+            "evidence_id": self.row["id"], "read_scope": "relevant_sections",
+            "family": "market", "summary": "본문은 이 고객 문제가 반복된다는 주장을 반박한다.",
+            "origin_group": "example-original-publisher", "origin_note": "원 생산자 본문",
+            "reviewer": "test", "collection_basis": "public_source_verified",
+            "limitations": ["고객 인터뷰가 아닌 공개 기사"],
+        })
+        payload = self.payload()
+        payload["assessments"] = {"problem": {
+            "status": "FACT", "conclusion": "문제가 반복된다는 주장을 반박하는 자료",
+            "evidence_ids": [self.row["id"]], "links": [{
+                "evidence_id": self.row["id"], "relation": "contradicts",
+                "basis": "official_research", "locator": "관련 본문", "note": "반대 사례",
+            }],
+        }}
+        result = blue_ocean.save(self.store, payload)
+        self.assertNotIn("problem", result["assessment"]["evidence_backed_assessments"])
         self.assertEqual(result["assessment"]["whitespace_state"], "unproven")
 
     def test_revision_required_and_stage_cannot_bypass_transition(self):

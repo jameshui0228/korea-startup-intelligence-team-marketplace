@@ -1,4 +1,4 @@
-# 허구김 · v0.4.0
+# 허구김 · v0.5.0
 
 한국의 약한 시장 신호에서 아직 충분히 해결되지 않은 고객 문제와 공급 공백을 찾고,
 아이디어를 검증·실행하고 창업자 적합성·시간·예산·WIP·실험·출시 KPI·보류·폐기·재개까지 관리하는
@@ -7,7 +7,7 @@
 공모전·지원사업·협업·텔레그램은 명시적으로 요청할 때만 쓰는 선택 기능이다.
 API는 수집 범위/빈도를 확장하는 선택 사항이며 사업 성공이나 예측 정확도를 보장하지 않는다.
 
-요청 전체와 구현/절차/미연결 범위의 대조는 [REQUIREMENTS_COVERAGE.md](REQUIREMENTS_COVERAGE.md)를 확인한다.
+사용자가 제시한 76개 개선 항목의 번호별 구현/부분/연결·실측 대기는 [ACCEPTANCE_76.md](ACCEPTANCE_76.md)에, 두 마스터 프롬프트의 대조는 [REQUIREMENTS_COVERAGE.md](REQUIREMENTS_COVERAGE.md)에 있다.
 
 ## 지금 포함된 것
 
@@ -23,7 +23,12 @@ API는 수집 범위/빈도를 확장하는 선택 사항이며 사업 성공이
   자리 확보 또는 폐기 이후 확인된 새 근거에 따른 재개. 외부 연락·지출·게시·출시는 자동 실행하지 않음.
 - 경쟁사 검색 결과 0건을 블루오션으로 오인하지 않는 근거 게이트. UNKNOWN을 0점이나 임의 성공확률로 바꾸지 않음.
 - 레이더 가설→블루오션 후보→dossier→수치/정성 검증 결과를 연결하고, 직전 브리핑 이후 달라진 판단만 보여 주는 개인 창업 포트폴리오.
-- 기존 워크스페이스의 사용자 설정을 보존하면서 v0.4.0 제품 기본값을 채우는 안전한 설정 마이그레이션.
+- 기존 워크스페이스의 사용자 설정을 보존하면서 v0.5.0 제품 기본값을 채우는 안전한 설정 마이그레이션.
+- `blue-ocean run`: 허용 최신 소스 수집→기존 opportunity/dossier 승계→후보 재평가→변화 브리핑을 한 번에 준비. 원문 해석과 새 아이디어 작성은 Codex가 이어서 수행한다.
+- 채용·특허·표준·논문·조달·앱·커머스·펀딩·규제·KOSIS/ECOS·SNS는 직접 API가 없을 때도 `signal import`로 실제 읽은 공개 원문/허용 export를 날짜·생산자·단위와 함께 접수한다. 직접 실시간 연결이라고 표시하지 않는다.
+- 신호 그래프·수요/공급 불일치 후보·해외→한국 관측 시차·역방향/상시 문제 후보·산업 간 이전 질문과 광고/계절/봇 위험 표시.
+- 개인 창업자 파일과 구조화 적합성, 설명형 파레토 비교, 월간 시간·예산, 후보별 작업 결과, 외부 행동 승인 상태, 인터뷰/MVP/가격/GTM 패키지, 계획 대비 실행 편차.
+- 판단 변화 전후값·사유, 의미 중복 경고, 포화도 추적, 후보 검색/따라잡기, 9개 성능지표의 명시적 분모/미측정 상태.
 - 사용자 원본 **400개 분야·3,559개 세부항목·89개 압축 분류**와 2개 마스터 요청의 원문/해시 보존.
 - 기존 GitHub 조사 **177개 저장소 메타데이터 색인**과 실제 설계에 반영한 출처.
 - 신규 GitHub·Hacker News·Google Trending RSS·Google News RSS 읽기 전용 수집.
@@ -56,16 +61,26 @@ API는 수집 범위/빈도를 확장하는 선택 사항이며 사업 성공이
 
 ```bash
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path init
-python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean prepare --limit 6
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean onboard
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean run --limit 6
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean prepare --no-refresh --limit 6
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean sync
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean sync --apply
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean status
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean next
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean signals
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean patterns
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean portfolio
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean metrics
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean brief
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path operator template profile
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path operator configure --file /absolute/founder-profile.json
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path operator status
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path operator plan
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path operator monthly
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path operator package --id CANDIDATE_ID --apply
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path operator task-board
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path operator variance
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path operator reconcile
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path operator reconcile --apply
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path operator weekly --week-start 2026-09-14
@@ -74,6 +89,9 @@ python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path re
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path domains --query "제조"
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path ideation-plan --limit 10
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path list idea
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path signal capabilities
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path signal template
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path signal import --file /absolute/reviewed-signal.json
 ```
 
 `/absolute/plugin/path`는 이 README가 있는 설치 폴더로, `/absolute/state/path`는 영구 상태 폴더로 바꾼다.
@@ -93,7 +111,7 @@ Python 3.10+ 표준 라이브러리, macOS/Linux 지원. Windows의 파일 잠�
 창업지원·수상·투자·매출은 보장하지 않는다. 실제 고객·단위경제·경쟁·권리·규제 검증이 우선이다.
 
 Google Trends 전체 API, Instagram/TikTok/X/Threads/Reddit, Product Hunt, K-Startup, KOSIS/ECOS,
-특허/채용/앱 순위/커머스/투자 데이터는 별도 권한·어댑터·테스트가 필요하다. registry 등록과 실연결을 구분한다.
+특허/채용/앱 순위/커머스/투자 데이터의 **직접 자동 수집**은 별도 권한·어댑터·테스트가 필요하다. 공개 원문 또는 허용 export의 개별 검토 접수와 플랫폼 전체 실연결을 구분한다.
 네이버 구 쇼핑 검색 API가 종료된 상태이므로 이를 동작한다고 표시하지 않는다.
 HWP/HWPX 생성·렌더링, 신청서 자동 제출, 고객 연락, SNS 게시, 결제는 본 CLI 기능이 아니다.
 

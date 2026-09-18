@@ -54,7 +54,7 @@ class WorkspaceTest(unittest.TestCase):
         self.store.close()
         atomic_json(self.workspace / "config.json", {"schema_version": 1, "enabled_sources": ["google_news_rss"]})
         self.store = Store(self.workspace)
-        self.assertEqual(self.store.config["workspace_profile_version"], 4)
+        self.assertEqual(self.store.config["workspace_profile_version"], 5)
         self.assertEqual(self.store.config["product_focus"], "blue_ocean_discovery_and_personal_founder_operations")
         self.assertEqual(self.store.config["enabled_sources"], ["google_news_rss"])
         persisted = json.loads((self.workspace / "config.json").read_text())
