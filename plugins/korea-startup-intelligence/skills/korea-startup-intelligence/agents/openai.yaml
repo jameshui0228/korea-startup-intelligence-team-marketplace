@@ -1,4 +1,4 @@
 interface:
   display_name: "허구김"
-  short_description: "전 분야 아이디어 발굴과 최신 근거 기반 한국 창업 검증"
-  default_prompt: "$korea-startup-intelligence로 오늘 한국 시장의 변화와 검증할 창업 기회를 찾아줘."
+  short_description: "한국의 초기 시장공백을 찾고 아이디어 실행까지 관리"
+  default_prompt: "$korea-startup-intelligence로 오늘 한국에서 아직 덜 알려진 시장공백을 찾고, 가장 중요한 다음 행동까지 관리해줘."

@@ -10,7 +10,9 @@ from pathlib import Path
 from ksi_lib.engine import choose_domains, coverage, refresh
 from ksi_lib.model import (REQUIRED, Store, assets, atomic_json, canonical_url, credentials,
                            init_workspace, now, observation, parse_date, stamp, validate_record)
-from ksi_lib import radar, telegram, research, grants, operations, venture, validation, agenda, application, market, workbench, competition, trend_forecast
+from ksi_lib import (radar, telegram, research, grants, operations, venture, validation,
+                     agenda, application, market, workbench, competition, trend_forecast,
+                     blue_ocean)
 
 
 def edit_payload(store, path, kind, prefix):
@@ -53,6 +55,8 @@ def doctor(store):
             "credentials_values_logged": False,
             "scheduler": radar.ensure_radar(store)["scheduler"] if (store.workspace / "radar.json").exists() else {"status": "not_configured"},
             "telegram": telegram.status(store) if (store.workspace / "radar.json").exists() else {"enabled": False},
+            "blue_ocean": {"candidates": len(store.records("blue_ocean")),
+                           "next_actions": len(blue_ocean.next_actions(store, 50)["items"])},
             "learning_boundary": "Persistent evidence and outcome records, not model weight training or guaranteed skill improvement"}
 
 
@@ -135,6 +139,21 @@ def run(args):
             return {"resolved_forecasts": len(rows), "mean_brier": sum(r["brier_score"] for r in rows) / len(rows) if rows else None,
                     "calibration_validated": False, "note": "No claim of predictive skill from small selected samples; compare baselines and retain misses."}
         with locked(store):
+            if args.command == "blue-ocean":
+                if args.action == "prepare":
+                    return blue_ocean.prepare(store, args.limit)
+                if args.action == "template":
+                    return blue_ocean.template()
+                if args.action == "save":
+                    return blue_ocean.save(store, json.loads(Path(args.file).read_text()))
+                if args.action == "status":
+                    return blue_ocean.status(store, args.id)
+                if args.action == "next":
+                    return blue_ocean.next_actions(store, args.limit)
+                if args.action == "transition":
+                    return blue_ocean.transition(store, json.loads(Path(args.file).read_text()))
+                if args.action == "brief":
+                    return blue_ocean.brief(store)
             if args.command == 'workbench':
                 return workbench.execute(store, args.action, args)
             if args.command == "application":
@@ -325,6 +344,20 @@ def main():
     s = sub.add_parser("market-map", help="All-sector navigation with signal, review and result coverage; no API keys")
     s.add_argument("--query", default="")
     s.add_argument("--limit", type=int, default=20)
+    s = sub.add_parser("blue-ocean", help="Discover and manage evidence-linked Korean market whitespace")
+    actions = s.add_subparsers(dest="action", required=True)
+    r = actions.add_parser("prepare", help="Prepare broad discovery and follow-up research without requiring API keys")
+    r.add_argument("--limit", type=int, default=6)
+    actions.add_parser("template", help="Return the candidate contract Codex fills for the user")
+    r = actions.add_parser("save", help="Save or revise an evidence-linked market-whitespace candidate")
+    r.add_argument("--file", required=True)
+    r = actions.add_parser("status", help="Show the persistent candidate portfolio and current evidence gaps")
+    r.add_argument("--id")
+    r = actions.add_parser("next", help="Show due next actions; not a success-probability ranking")
+    r.add_argument("--limit", type=int, default=10)
+    r = actions.add_parser("transition", help="Move a candidate through validation and execution with stage gates")
+    r.add_argument("--file", required=True)
+    actions.add_parser("brief", help="Write a concise personal founder brief from the current portfolio")
     s = sub.add_parser("refresh")
     s.add_argument("--topic", action="append")
     s.add_argument("--source", action="append")
@@ -332,7 +365,7 @@ def main():
     s.add_argument("--sector-batch", type=int)
     s.add_argument("--force", action="store_true", help="Bypass freshness; use only for targeted diagnosis")
     s = sub.add_parser("list")
-    s.add_argument("kind", choices=["evidence", "trend", "resolution", "opportunity", "dossier", "grant",
+    s.add_argument("kind", choices=["evidence", "trend", "resolution", "opportunity", "blue_ocean", "blue_ocean_event", "dossier", "grant",
                                     "venture_review", "validation_plan", "validation_result", "research_run", "research_receipt", "application"] + list(REQUIRED))
     s.add_argument("--topic")
     s.add_argument("--limit", type=int, default=20)

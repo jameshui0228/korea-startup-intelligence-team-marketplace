@@ -1,15 +1,15 @@
 {
   "name": "korea-startup-intelligence",
-  "version": "0.1.2",
-  "description": "\ud55c\uad6d \uc804 \ubd84\uc57c\uc758 \ucd08\uae30 \uc2e0\ud638\ub97c \uc218\uc9d1\ud558\uace0 \uadfc\uac70\u00b7\uc544\uc774\ub514\uc5b4\u00b7\uace0\uac1d \uac80\uc99d\u00b7\uc9c0\uc6d0\uc0ac\uc5c5 \uc900\ube44\ub97c \uc5f0\uacb0\ud558\ub294 \ucc3d\uc5c5 \uc778\ud154\ub9ac\uc804\uc2a4",
+  "version": "0.2.0",
+  "description": "한국의 약한 시장 신호에서 블루오션 사업기회를 찾고 아이디어 검증·실행·보류·폐기까지 관리하는 개인 창업 에이전트",
   "author": {
     "name": "James Hui"
   },
   "skills": "./skills/",
   "interface": {
-    "displayName": "\ud5c8\uad6c\uae40",
-    "shortDescription": "\ucd94\uac00 API \ud0a4 \uc5c6\uc774 \u00b7 \uc804 \ubd84\uc57c \ud0d0\uc0c9 \u00b7 \uc0ac\uc5c5 \uac80\uc99d \u00b7 \uc9c0\uc6d0\uc11c\u00b7\ubc1c\ud45c",
-    "longDescription": "\uad6d\ub0b4\uc678 \ucd08\uae30 \uc2e0\ud638\ub97c \uad50\ucc28\uac80\ud1a0\ud558\uace0 \ud55c\uad6d \uc2dc\uc7a5\uc758 \ubb38\uc81c\u00b7\uacbd\uc7c1\u00b7\uc9c0\ubd88\uc758\uc0ac\u00b7MVP\u00b7\uc9c0\uc6d0\uc0ac\uc5c5 \uc801\ud569\uc131\uc744 \uc5f0\uacb0\ud569\ub2c8\ub2e4. \ucd9c\ucc98\u00b7\ub0a0\uc9dc\u00b7\ub370\uc774\ud130 \uc811\uadfc \ubc94\uc704\uc640 \ubd88\ud655\uc2e4\uc131\uc744 \ub0a8\uae30\uba70 \uc544\uc774\ub514\uc5b4\u00b7\uc2e4\ud5d8\u00b7\uacb0\uacfc\ub97c \ub85c\uceec\uc5d0 \ub204\uc801\ud569\ub2c8\ub2e4. \uc120\uc815\u00b7\uc218\uc0c1\u00b7\uc608\uce21 \uc815\ud655\ub3c4\ub97c \ubcf4\uc7a5\ud558\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4.",
+    "displayName": "허구김",
+    "shortDescription": "추가 API 없이 · 한국 블루오션 탐색 · 아이디어 운영",
+    "longDescription": "국내외 약한 신호와 고객 행동을 교차검토해 한국 시장의 문제·현재 지출·공급 공백·전환 이유를 찾습니다. 아이디어를 발견에서 검증·구축·출시·보류·폐기까지 관리하고, 판단 이력·반대 근거·다음 행동을 로컬에 누적합니다. 사업 성공이나 예측 정확도를 보장하지 않습니다.",
     "developerName": "James Hui",
     "category": "Productivity",
     "capabilities": [
@@ -17,9 +17,9 @@
       "Write"
     ],
     "defaultPrompt": [
-      "\ucd94\uac00 API \uc5f0\uacb0 \uc5c6\uc774 \ud55c\uad6d\uc758 \uc11c\ub85c \ub2e4\ub978 \uc2dc\uc7a5\uc5d0\uc11c \ucd08\uae30 \ubcc0\ud654\uc640 \ucc3d\uc5c5 \uae30\ud68c\ub97c \uc870\uc0ac\ud574\uc918",
-      "\uc804 \ubd84\uc57c\uc5d0\uc11c \uc544\uc9c1 \ub35c \uc54c\ub824\uc9c4 \ubb38\uc81c\uc640 \ucc3d\uc5c5 \uac00\uc124\uc744 \ucc3e\uc544\uc918",
-      "\uc774 \uc544\uc774\ub514\uc5b4\ub97c gstack \uad00\uc810\uc73c\ub85c \uac80\ud1a0\ud558\uace0 \uadfc\uac70 \uc788\ub294 \uc0ac\uc5c5\uacc4\ud68d\u00b7\ubc1c\ud45c\u00b7\uc2ec\uc0ac \ub300\ube44\ub85c \ubc1c\uc804\uc2dc\ucf1c\uc918"
+      "오늘 한국에서 아직 덜 알려진 시장공백과 초기 신호를 조사해줘",
+      "이 아이디어를 관리 시작하고 다음 검증 행동과 중단 기준을 정해줘",
+      "내 아이디어 포트폴리오에서 새 근거 때문에 판단이 바뀐 것만 정리해줘"
     ]
   }
 }

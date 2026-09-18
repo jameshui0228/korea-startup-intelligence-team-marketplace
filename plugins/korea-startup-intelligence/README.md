@@ -1,13 +1,19 @@
-# 허구김 · v0.1.2
+# 허구김 · v0.2.0
 
-한국 모든 분야의 아이디어를 탐색하고, 초기 신호를 실제 고객 문제·검증 실험·지원사업 준비로 연결하는 Codex 플러그인 **허구김**.
-기본 사용은 **추가 API 키 없이 현재 Codex에서** 조사·아이디어·사업계획·발표·심사 대비를 수행한다.
-API는 수집 범위/빈도를 확장하는 선택 사항이다. 근거와 실제 결과를 축적하지만 전 분야 숙련·선정/수상을 보장하지 않는다.
+한국의 약한 시장 신호에서 아직 충분히 해결되지 않은 고객 문제와 공급 공백을 찾고,
+아이디어를 검증·실행·보류·폐기까지 관리하는 개인용 Codex 창업 에이전트 **허구김**.
+기본 사용은 **추가 API 키 없이 현재 Codex에서** 블루오션 탐색과 아이디어 포트폴리오 운영을 수행한다.
+공모전·지원사업·협업·텔레그램은 명시적으로 요청할 때만 쓰는 선택 기능이다.
+API는 수집 범위/빈도를 확장하는 선택 사항이며 사업 성공이나 예측 정확도를 보장하지 않는다.
 
 요청 전체와 구현/절차/미연결 범위의 대조는 [REQUIREMENTS_COVERAGE.md](REQUIREMENTS_COVERAGE.md)를 확인한다.
 
 ## 지금 포함된 것
 
+- blue-ocean 운영체제: 시장공백 8항목, 신호 6항목, 후보별 다음 행동·중단/재개 조건·상태 전이·판단 이력.
+- detected → watching → researching → validating → building → launched → scaling 생명주기와 parked/killed 관리.
+- 경쟁사 검색 결과 0건을 블루오션으로 오인하지 않는 근거 게이트. UNKNOWN을 0점이나 임의 성공확률로 바꾸지 않음.
+- 오늘의 후보·판단 변경·마감 행동을 보여 주는 개인 창업 포트폴리오 브리핑.
 - 사용자 원본 **400개 분야·3,559개 세부항목·89개 압축 분류**와 2개 마스터 요청의 원문/해시 보존.
 - 기존 GitHub 조사 **177개 저장소 메타데이터 색인**과 실제 설계에 반영한 출처.
 - 신규 GitHub·Hacker News·Google Trending RSS·Google News RSS 읽기 전용 수집.
@@ -32,7 +38,7 @@ API는 수집 범위/빈도를 확장하는 선택 사항이다. 근거와 실�
 
 ## 사용
 
-새 Codex 작업에서 `$korea-startup-intelligence`를 선택하거나 “한국 창업 트렌드 레이더를 실행해줘”라고 요청한다.
+새 Codex 작업에서 `$korea-startup-intelligence`를 선택하거나 “오늘 한국의 블루오션 후보를 찾고 다음 행동까지 관리해줘”라고 요청한다.
 플러그인은 해당 프로젝트의 `korea_startup_intelligence` 폴더를 상태 저장소로 사용한다.
 기존 상태가 있는 프로젝트에서 이어서 사용하면 누적 자료를 유지한다. 서로 다른 사업의 자료를 묻지 않고 합치지 않는다.
 
@@ -40,6 +46,10 @@ API는 수집 범위/빈도를 확장하는 선택 사항이다. 근거와 실�
 
 ```bash
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path init
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean prepare --limit 6
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean status
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean next
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean brief
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path market-map --limit 400
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path research-work plan --limit 6
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path domains --query "제조"
@@ -56,6 +66,8 @@ Python 3.10+ 표준 라이브러리, macOS/Linux 지원. Windows의 파일 잠�
 
 ## 정확한 경계
 
+블루오션은 경쟁 부재가 아니라 문제·현재 지출·공급 공백·시기·한국 적합성·고객 접근·전환 이유·반대 근거를 함께 검토한 가설이다.
+후보는 `unproven`/`plausible`/`investigated`로 구분하지만 어느 상태도 성공확률이 아니다.
 수집기는 기본적으로 제목·링크·집계지수를 수집한다. 자동 본문 완독기, 유료 SNS 데이터 무제한 수집기, 검색량/매출 추정기가 아니다.
 중요 후보의 원문은 스킬이 별도로 열어 검토하고 결론과 증거를 저장한다. 400개 분야를 등록했다고 전 분야를 깊게 학습했다고 하지 않는다.
 트렌드 휴리스틱은 통계적/예측적 검증이 아직 없다. 별도 실제 결과를 쌓아 기본 모델과 비교해야 한다.
@@ -108,11 +120,11 @@ YouTube 연결 시 watch_topics가 비어 있어도 해당 회차의 분야 검�
 
 ## 다음 확장 우선순위
 
-1. API 없이 공개 원문과 허용된 사용자 자료로 서로 다른 산업의 문제·대안·지불 근거를 조사하고 실제 결과물을 개선.
-2. 넓은 시장 지도와 좁은 고객 검증을 연결하고, 사업계획 본문·발표·심사 대비의 실제 사례를 축적.
+1. 블루오션 후보와 실제 고객·거래 결과를 연결해 보류·폐기까지 포함한 포트폴리오 판단을 개선.
+2. 리뷰·채용·조달·특허·가격·품절·앱 변화 등 사업 선행 신호 어댑터를 공개·허용 범위에서 확장.
 3. 30/90/180일 결과로 거짓 양성·누락·계절성·기저와 한국 시장 진입 시차를 평가.
-4. 필요한 데이터만 선택적으로 어댑터 확장. NAVER와 외부 서버·LLM API·Telegram 추가 개발은 사용자 재요청 전 보류.
-5. 공식 서식별 문서 생성/렌더링은 별도 실제 양식과 시각 검수를 통해 확장.
+4. 자연어 요청에서 조사→저장→다음 행동→재평가까지 사용자가 내부 명령을 보지 않도록 단순화.
+5. 공모전·지원사업·협업·Telegram은 핵심 탐색 흐름을 방해하지 않는 선택 모듈로 유지.
 
 ### 심층 조사 명령
 
