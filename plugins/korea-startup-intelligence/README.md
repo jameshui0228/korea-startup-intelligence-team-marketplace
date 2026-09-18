@@ -1,4 +1,4 @@
-# 허구김 · v0.5.2
+# 허구김 · v0.5.3
 
 한국의 약한 시장 신호에서 아직 충분히 해결되지 않은 고객 문제와 공급 공백을 찾고,
 아이디어를 검증·실행하고 창업자 적합성·시간·예산·WIP·실험·출시 KPI·보류·폐기·재개까지 관리하는
@@ -26,6 +26,7 @@ API는 수집 범위/빈도를 확장하는 선택 사항이며 사업 성공이
 - 기존 워크스페이스의 사용자 설정을 보존하면서 v0.5.0 제품 기본값을 채우는 안전한 설정 마이그레이션.
 - 핵심 상태·포트폴리오·운영 조회는 읽기 전용 SQLite 연결을 사용해 수집 실행과의 쓰기 잠금 경합을 줄임.
 - `blue-ocean run`: 허용 최신 소스 수집→기존 opportunity/dossier 승계→후보 재평가→변화 브리핑을 한 번에 준비. 원문 해석과 새 아이디어 작성은 Codex가 이어서 수행한다.
+- `blue-ocean bootstrap`: 고객 실험 결과가 0건이어도 핵심 주장/반례표, 대안·공개 가격 감사, 연락 전 채널 지도, null을 보존한 단위경제 가정 범위, 첫 검증 사전 기준을 만든다. 사업 순위나 가상 고객 결과를 만들지 않으며 `--apply`는 외부 행동 없는 로컬 작업 5개만 생성한다.
 - 논문은 Crossref 최근 등록 메타데이터의 제한된 표본을 기본 수집하고, KOSIS는 키와 등록 통계표 설정이 있을 때 정의·단위·모집단·기간·판본과 함께 조회한다. 채용·특허·표준·조달·앱·커머스·펀딩·규제·ECOS·SNS는 직접 API가 없을 때도 `signal import`로 실제 읽은 공개 원문/허용 export를 날짜·생산자·단위와 함께 접수한다. 직접 실시간 연결이라고 표시하지 않는다.
 - 신호 그래프·수요/공급 불일치 후보·해외→한국 관측 시차·역방향/상시 문제 후보·산업 간 이전 질문과 광고/계절/봇 위험 표시.
 - 개인 창업자 파일과 구조화 적합성, 설명형 파레토 비교, 월간 시간·예산, 후보별 작업 결과, 외부 행동 승인 상태, 인터뷰/MVP/가격/GTM 패키지, 계획 대비 실행 편차.
@@ -73,6 +74,8 @@ python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path bl
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean patterns
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean portfolio
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean metrics
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean bootstrap --id CANDIDATE_ID
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean bootstrap --id CANDIDATE_ID --apply
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean brief
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path operator template profile
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path operator configure --file /absolute/founder-profile.json

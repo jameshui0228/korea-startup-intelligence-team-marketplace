@@ -16,6 +16,7 @@
 2. 관심 후보마다 `operator template fit`을 작성해 역량·고객 접근·동기·시간·자본·도메인·규제 적합성을
    ALIGNED/PARTIAL/MISFIT/UNKNOWN으로 분리한다. agent_inference는 확인된 적합성으로 승격하지 않는다.
 3. `operator template pipeline`으로 인터뷰→MVP→가격→GTM 단계와 기존 validation plan을 연결하고, 후보별 주간 목표·병목·결정기한을 기록한다. `operator package --id ID --apply`는 네 단계의 인터뷰 질문/수동 MVP/가격 시험/GTM 초안과 로컬 작업 4개를 생성하지만 실행하지 않는다.
+   아직 실험 결과가 하나도 없으면 먼저 `blue-ocean bootstrap --id ID --apply`로 외부 행동 없는 데스크 조사 5개를 만들고 가장 큰 미확인을 줄인 뒤 pipeline을 등록한다.
 4. `operator plan`에서 이번 주 집중 후보, 시간·예산 배분, WIP 초과, 미설정 정보를 확인한다.
 5. `operator reconcile`로 변경 예정 상태를 먼저 보고, 사용자가 운영을 요청한 경우 `--apply`로 로컬 정책을 적용한다.
 6. 출시 전 KPI 정의를 등록하고 출시 이후 허용된 측정 근거로 주간 snapshot을 쌓는다.
@@ -56,6 +57,7 @@ track 상태는 ready/planned/running/awaiting_result/inconclusive/passed/stoppe
 사전 결과가 criterion_met이면 다음 의존 단계가 열리고 stop_criterion_met이면 운영 정책에 따라 후보 폐기가 제안된다.
 `reconcile --apply`는 현재 track의 사전 계획에서 후보 next_action과 기한·예산을 동기화한다.
 실험이 없으면 다음 validation plan 작성이 행동으로 제시될 뿐 고객 실험을 실행했다고 기록하지 않는다.
+부트스트랩의 완료도 고객 결과가 아니다. 실제 인터뷰·행동·거래 관측이 생긴 뒤 별도 validation result 또는 task result 근거로 기록한다.
 
 auto_advance_gated_stages는 기존 blue-ocean 근거 게이트가 이미 통과한 researching→validating,
 실제 criterion_met 결과가 있는 validating→building만 이동한다. launched/scaling은 사용자 소유 실행·거래/KPI 근거를

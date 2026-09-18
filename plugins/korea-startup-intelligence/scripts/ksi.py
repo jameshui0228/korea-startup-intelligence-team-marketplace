@@ -12,7 +12,8 @@ from ksi_lib.model import (REQUIRED, Store, assets, atomic_json, canonical_url, 
                            init_workspace, now, observation, parse_date, stamp, validate_record)
 from ksi_lib import (radar, telegram, research, grants, operations, venture, validation,
                      agenda, application, market, workbench, competition, trend_forecast,
-                     blue_ocean, founder_ops, venture_intelligence, venture_ops, signal_intake)
+                     blue_ocean, founder_ops, venture_intelligence, venture_ops, signal_intake,
+                     prevalidation)
 
 
 def edit_payload(store, path, kind, prefix):
@@ -62,7 +63,8 @@ def doctor(store):
             "blue_ocean": {"candidates": len(store.records("blue_ocean")),
                            "next_actions": len(blue_ocean.next_actions(store, 50)["items"]),
                            "unmanaged_radar_hypotheses": sum(i["action"] == "adopt" for i in sync_preview["items"]),
-                           "qualitative_experiments": sum(e.get("method_type") == "qualitative" for e in validation_plans)},
+                           "qualitative_experiments": sum(e.get("method_type") == "qualitative" for e in validation_plans),
+                           "prevalidation_bootstraps": len(store.records("prevalidation_bootstrap"))},
             "founder_operations": {"configured": operator_status["configured"],
                                    "focus_candidates": len(operator_status["capacity_plan"].get("focus", [])),
                                    "overflow_candidates": len(operator_status["capacity_plan"].get("overflow", [])),
@@ -127,7 +129,8 @@ def read_only_command(args):
         return True
     if args.command == "blue-ocean":
         return args.action in {"template", "status", "next", "history", "signals", "patterns", "lag",
-                               "transfers", "portfolio", "design", "sources", "metrics", "search", "catch-up"}
+                               "transfers", "portfolio", "design", "sources", "metrics", "search", "catch-up"} or \
+               (args.action == "bootstrap" and not args.apply)
     if args.command == "operator":
         return args.action in {"template", "status", "plan", "task-board", "monthly", "variance",
                                "failures", "kpi-defaults", "overview"}
@@ -201,6 +204,8 @@ def run(args):
                         args.stage, args.max_budget, args.due_before)}
         if args.command == "blue-ocean" and args.action == "catch-up":
             return venture_intelligence.catch_up(store, args.since)
+        if args.command == "blue-ocean" and args.action == "bootstrap" and not args.apply:
+            return prevalidation.bootstrap(store, args.id, args.limit, apply=False)
         if args.command == "blue-ocean" and args.action == "onboard":
             portfolio = blue_ocean.status(store)
             adoption = blue_ocean.sync(store)
@@ -242,6 +247,7 @@ def run(args):
                     prepared = blue_ocean.prepare(store, args.limit, args.no_refresh, args.max_requests, args.sector_batch)
                     report = blue_ocean.brief(store)
                     return {"discovery": prepared, "brief": report, "operator": venture_ops.status(store),
+                            "prevalidation": prevalidation.bootstrap(store, limit=min(args.limit, 5), apply=False),
                             "boundary": "실제 원문 검토·아이디어 판단은 Codex가 이어서 수행해야 합니다. 명령 자체는 자동 추론 모델이 아닙니다."}
                 if args.action == "template":
                     return blue_ocean.template()
@@ -259,6 +265,8 @@ def run(args):
                     return blue_ocean.sync(store, args.apply)
                 if args.action == "reassess":
                     return blue_ocean.reassess_all(store, apply=args.apply)
+                if args.action == "bootstrap":
+                    return prevalidation.bootstrap(store, args.id, args.limit, apply=True)
             if args.command == "operator":
                 if args.action == "task":
                     return venture_ops.save_task(store, json.loads(Path(args.file).read_text()))
@@ -525,6 +533,10 @@ def main():
     r.add_argument("--due-before")
     r = actions.add_parser("catch-up", help="Show saved changes since the last visit")
     r.add_argument("--since", required=True)
+    r = actions.add_parser("bootstrap", help="Make progress before any experiment result exists")
+    r.add_argument("--id", help="Candidate id or key; omit for a learning-priority portfolio")
+    r.add_argument("--limit", type=int, default=5)
+    r.add_argument("--apply", action="store_true", help="Save the bootstrap and local desk-research tasks; no external action")
     s = sub.add_parser("operator", help="Personal founder fit, resources, WIP, experiment pipeline, KPI and CEO briefing")
     actions = s.add_subparsers(dest="action", required=True)
     r = actions.add_parser("template")

@@ -342,7 +342,7 @@ def init_workspace(path):
         atomic_json(path / "config.json", DEFAULT_CONFIG)
     files = {
         "FOUNDER_CONTEXT.md": "# 창업자 컨텍스트\n\n시장: 대한민국\n단계: 블루오션 탐색\n지역: 미확인\n주간 가용 시간: 미확인\n주간 운영 예산: 미확인\n총 가용 현금: 미확인\n보호 예비금: 미확인\n역량/경험: 미확인\n접근 가능한 고객: 미확인\n제외 산업: 미확인\n위험 경계: 미확인\n\n개인 식별정보·주민번호·계좌·API 키를 쓰지 않는다.\n",
-        "NEXT_ACTIONS.md": "# 다음 행동\n\n1. blue-ocean prepare로 기존 후보·근거 공백·덜 조사한 시장을 함께 확인한다.\n2. operator template profile로 실제 주간 시간·예산·보호 예비금·WIP 한도를 확인한다.\n3. 후보별 창업자 적합성과 interview→MVP→pricing→GTM 파이프라인을 연결한다.\n4. operator weekly로 집중 과제·KPI·보류/폐기/재개 결정을 검토한다.\n\n공모전·지원사업·협업·메시지 전달은 요청할 때만 선택적으로 사용한다. 고객 연락·비용 집행·신청은 별도 요청이 필요하다.\n",
+        "NEXT_ACTIONS.md": "# 다음 행동\n\n1. blue-ocean prepare로 기존 후보·근거 공백·덜 조사한 시장을 함께 확인한다.\n2. 실험 결과가 없으면 blue-ocean bootstrap으로 공개자료 조사·대안·채널·가정 범위·첫 검증 준비를 만든다.\n3. operator template profile로 실제 주간 시간·예산·보호 예비금·WIP 한도를 확인한다.\n4. 후보별 창업자 적합성과 interview→MVP→pricing→GTM 파이프라인을 연결한다.\n5. operator weekly로 집중 과제·KPI·보류/폐기/재개 결정을 검토한다.\n\n공모전·지원사업·협업·메시지 전달은 요청할 때만 선택적으로 사용한다. 고객 연락·비용 집행·신청은 별도 요청이 필요하다.\n",
         ".gitignore": ".secrets.env\n.telegram.env\n*.sqlite3*\nreports/\n*.private.*\n",
         ".secrets.env.example": "# 실제 키는 .secrets.env에 입력하고 chmod 600으로 제한. 채팅에 붙이지 않는다.\nNAVER_HUB_CLIENT_ID=\nNAVER_HUB_CLIENT_SECRET=\nYOUTUBE_API_KEY=\nBIZINFO_API_KEY=\nKOSIS_API_KEY=\n",
     }

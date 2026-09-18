@@ -14,6 +14,7 @@
    기존 카드의 승계는 `blue-ocean sync`로 미리 보고 `blue-ocean sync --apply`로 적용한다.
 4. `blue-ocean save`: 독립 후보의 시장공백, 신호 상태, 반대 근거, 다음 행동을 저장한다.
 5. `blue-ocean status|next|brief|history|portfolio`: 포트폴리오, 파레토 비교, 판단이 바뀐 이유와 지금 할 일을 보여 준다. `signals|patterns|lag|transfers|design`은 신호 군집·상시 문제·해외→한국 시차·산업 간 이전·진입 구조의 **조사 후보**를 보여 준다. `search`, `catch-up`, `metrics`로 필터·놓친 변화·실측 분모를 점검한다.
+   실제 실험 결과가 없으면 `blue-ocean bootstrap`으로 학습 우선순위와 공개자료 기반 사전검증 작업을 만들며, `--apply`도 후보 단계나 고객 결과를 생성하지 않는다.
 6. dossier·실험·근거·작업 결과가 바뀌면 후보를 재평가하고 차이와 재검토 과제를 저장한다. 명시적 구조화 중단 조건이나 핵심 근거 만료는 로컬 보류·폐기 게이트를 따르며 외부 행동을 실행하지 않는다.
 7. 실제 근거가 바뀌면 후보를 수정하고 `blue-ocean transition`으로 생명주기를 이동한다.
 
@@ -71,6 +72,7 @@ detected → watching → researching → validating → building → launched �
 
 각 활성 후보는 미래 `review_after`와 하나의 `next_action`을 가진다. 다음 행동에는 가설, 행동,
 통과 기준, 중단 기준, 기한, 예산 상한, 외부 행동 여부를 적는다. 계획은 실행이 아니며 고객 연락·광고·구매·게시에는 별도 요청이 필요하다.
+실험 결과가 0건인 후보도 researching까지는 공개 근거·대안·창업자 조건으로 운영할 수 있고, 근거 게이트를 충족하면 validating에서 사전 계획을 준비할 수 있다. building 이후는 실제 결과 게이트를 우회하지 않는다.
 
 ## 기본 응답
 
