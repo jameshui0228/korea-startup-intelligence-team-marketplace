@@ -154,7 +154,7 @@ DEFAULT_CONFIG = {"schema_version": 1, "workspace_profile_version": 5,
                   "retention_days": 28}
 
 
-def migrate_config(path, config):
+def migrate_config(path, config, *, persist=True):
     """Add safe product defaults without overwriting user configuration.
 
     The SQLite schema and the human-facing product profile evolve separately.
@@ -174,21 +174,28 @@ def migrate_config(path, config):
     if migrated.get("product_focus") == "blue_ocean_discovery_and_venture_lifecycle":
         migrated["product_focus"] = DEFAULT_CONFIG["product_focus"]
     migrated["workspace_profile_version"] = DEFAULT_CONFIG["workspace_profile_version"]
-    if migrated != config:
+    if persist and migrated != config:
         atomic_json(path, migrated)
     return migrated
 
 
 class Store:
-    def __init__(self, workspace):
+    def __init__(self, workspace, *, read_only=False):
         self.workspace = Path(workspace).expanduser().resolve()
         config_path = self.workspace / "config.json"
         if not config_path.exists():
             raise ValueError("Workspace not initialized; run init first")
-        self.config = migrate_config(config_path, json.loads(config_path.read_text()))
-        self.db = sqlite3.connect(self.workspace / "intelligence.sqlite3", timeout=10)
+        self.config = migrate_config(config_path, json.loads(config_path.read_text()), persist=not read_only)
+        db_path = self.workspace / "intelligence.sqlite3"
+        self.db = sqlite3.connect(db_path.as_uri() + "?mode=ro", uri=True, timeout=10) if read_only else \
+            sqlite3.connect(db_path, timeout=10)
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA foreign_keys=ON")
+        if read_only:
+            # Status/report commands must not migrate schemas or contend with
+            # a long collection run for a write lock.
+            self.db.execute("PRAGMA query_only=ON")
+            return
         tables = {r[0] for r in self.db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         if 'records' in tables and 'metric_samples' not in tables:
             directory = self.workspace / 'backups'

@@ -1,6 +1,7 @@
 """Integration checks for the v0.5 discovery-to-execution path."""
 import fcntl
 import json
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -142,6 +143,26 @@ class VentureIntelligenceTest(unittest.TestCase):
             result = subprocess.run([sys.executable, str(cli), "--workspace", str(self.workspace),
                 "operator", "overview"], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_read_only_status_does_not_migrate_config_or_open_database_for_writes(self):
+        self.add_candidate()
+        config_path = self.workspace / "config.json"
+        config = json.loads(config_path.read_text())
+        config.pop("signal_intake_lanes", None)
+        config_path.write_text(json.dumps(config, ensure_ascii=False))
+        before = config_path.read_bytes()
+        reader = Store(self.workspace, read_only=True)
+        try:
+            self.assertEqual(reader.db.execute("PRAGMA query_only").fetchone()[0], 1)
+            with self.assertRaises(sqlite3.OperationalError):
+                reader.db.execute("CREATE TABLE unexpected_write(id INTEGER)")
+        finally:
+            reader.close()
+        cli = ROOT / "scripts" / "ksi.py"
+        result = subprocess.run([sys.executable, str(cli), "--workspace", str(self.workspace),
+            "blue-ocean", "metrics"], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(config_path.read_bytes(), before)
 
 
 if __name__ == "__main__":

@@ -122,10 +122,22 @@ def resolve_forecast(store, record_id, outcome, evidence_id):
     return result
 
 
+def read_only_command(args):
+    if args.command in {"domains", "research", "coverage", "brief", "list", "ideation-plan", "evaluation"}:
+        return True
+    if args.command == "blue-ocean":
+        return args.action in {"template", "status", "next", "history", "signals", "patterns", "lag",
+                               "transfers", "portfolio", "design", "sources", "metrics", "search", "catch-up"}
+    if args.command == "operator":
+        return args.action in {"template", "status", "plan", "task-board", "monthly", "variance",
+                               "failures", "kpi-defaults", "overview"}
+    return args.command == "signal" and args.action in {"template", "capabilities"}
+
+
 def run(args):
     if args.command == "init":
         return {"workspace": init_workspace(args.workspace)}
-    store = Store(args.workspace)
+    store = Store(args.workspace, read_only=read_only_command(args))
     try:
         if args.command == "doctor":
             return doctor(store)
