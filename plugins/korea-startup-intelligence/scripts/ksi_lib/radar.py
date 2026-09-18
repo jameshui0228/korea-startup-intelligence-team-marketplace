@@ -14,14 +14,15 @@ from .model import (KST, assets, atomic_json, atomic_text, canonical_url, clean,
                     digest, now, observation, parse_date, stamp, validate_record)
 
 DEFAULT_RADAR = {
-    "schema_version": 1, "check_interval_minutes": 30,
+    "schema_version": 1, "operating_mode": "on_demand", "scheduler_required": False,
+    "check_interval_minutes": 30,
     "max_requests": 18, "sector_batch": 6, "max_review_topics": 4,
     "max_cards_per_cycle": 2, "evidence_max_age_days": 14,
     "source_freshness_hours": {"google_news_rss": 0.5, "google_trends_rss": 0.5,
                                "hackernews": 1, "github_new": 6},
     "telegram_enabled": False, "telegram_daily_limit": 6,
     "telegram_min_interval_minutes": 30, "telegram_card_max_age_hours": 24,
-    "quiet_hours_kst": [], "scheduler": {"status": "not_configured"},
+    "quiet_hours_kst": [], "scheduler": {"status": "not_required", "automation_id": None},
 }
 STAGES = {"Weak Signal", "Emerging", "Accelerating", "Mainstream", "Saturated", "Unknown"}
 FAMILIES = {"technology", "search", "community", "product", "investment", "policy", "consumer", "news", "customer", "environment", "market"}
@@ -64,7 +65,16 @@ def ensure_radar(store):
     """)
     if "cycle_id" not in {r["name"] for r in store.db.execute("PRAGMA table_info(telegram_attempts)")}:
         store.db.execute("ALTER TABLE telegram_attempts ADD COLUMN cycle_id TEXT")
-    cfg = {**DEFAULT_RADAR, **json.loads(path.read_text())}
+    raw = json.loads(path.read_text())
+    cfg = {**DEFAULT_RADAR, **raw}
+    # The current product is invoked on demand.  Stale scheduler registrations
+    # from older workspaces are compatibility history, not a health failure.
+    if store.config.get("operating_mode", "on_demand") == "on_demand":
+        cfg["operating_mode"] = "on_demand"
+        cfg["scheduler_required"] = False
+        cfg["scheduler"] = {"status": "not_required", "automation_id": None}
+    if cfg != raw and not store.db.execute("PRAGMA query_only").fetchone()[0]:
+        atomic_json(path, cfg)
     if cfg["schema_version"] != 1:
         raise ValueError("Unsupported radar configuration schema")
     for key, low, high in (("check_interval_minutes", 15, 1440), ("max_requests", 1, 30),
@@ -79,6 +89,8 @@ def ensure_radar(store):
         raise ValueError("quiet_hours_kst must be empty or two hours 0..23")
     if type(cfg["telegram_enabled"]) is not bool:
         raise ValueError("telegram_enabled must be boolean")
+    if cfg.get("operating_mode") not in ("on_demand", "scheduled") or type(cfg.get("scheduler_required")) is not bool:
+        raise ValueError("Invalid radar operating mode")
     return cfg
 
 

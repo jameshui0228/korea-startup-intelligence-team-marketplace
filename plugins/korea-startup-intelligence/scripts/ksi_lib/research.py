@@ -473,7 +473,7 @@ def report(store, period="daily"):
 def maintenance(store):
     """Create local reports once per KST day, ISO week and calendar month.
 
-    Called by the existing heartbeat; does not schedule, send or edit code.
+    Called explicitly in on-demand mode; does not schedule, send or edit code.
     """
     current = now().astimezone(KST)
     generated = []

@@ -13,7 +13,7 @@ from ksi_lib.model import (REQUIRED, Store, assets, atomic_json, canonical_url, 
 from ksi_lib import (radar, telegram, research, grants, operations, venture, validation,
                      agenda, application, market, workbench, competition, trend_forecast,
                      blue_ocean, founder_ops, venture_intelligence, venture_ops, signal_intake,
-                     prevalidation)
+                     prevalidation, no_api_research)
 
 
 def edit_payload(store, path, kind, prefix):
@@ -54,11 +54,18 @@ def doctor(store):
     sync_preview = blue_ocean.sync(store, apply=False)
     validation_plans = store.records("validation_plan")
     operator_status = founder_ops.status(store)
+    radar_cfg = radar.ensure_radar(store) if (store.workspace / "radar.json").exists() else {
+        "operating_mode": store.config.get("operating_mode", "on_demand"),
+        "scheduler_required": store.config.get("scheduler_required", False),
+        "scheduler": {"status": "not_required", "automation_id": None},
+    }
     return {"workspace": str(store.workspace), "sqlite_integrity": store.db.execute("PRAGMA integrity_check").fetchone()[0],
             "workspace_profile_version": store.config.get("workspace_profile_version"),
+            "operating_mode": radar_cfg["operating_mode"],
+            "api_credentials_required_for_core": False,
             "sources": sources, "coverage": {k: v for k, v in coverage(store).items() if k != "unqueried_domains"}, "research_references": len(assets("research_index.json")),
             "credentials_values_logged": False,
-            "scheduler": radar.ensure_radar(store)["scheduler"] if (store.workspace / "radar.json").exists() else {"status": "not_configured"},
+            "scheduler": radar_cfg["scheduler"],
             "telegram": telegram.status(store) if (store.workspace / "radar.json").exists() else {"enabled": False},
             "blue_ocean": {"candidates": len(store.records("blue_ocean")),
                            "next_actions": len(blue_ocean.next_actions(store, 50)["items"]),
@@ -134,7 +141,7 @@ def read_only_command(args):
     if args.command == "operator":
         return args.action in {"template", "status", "plan", "task-board", "monthly", "variance",
                                "failures", "kpi-defaults", "overview"}
-    return args.command == "signal" and args.action in {"template", "capabilities"}
+    return args.command == "signal" and args.action in {"template", "capabilities", "web-plan"}
 
 
 def run(args):
@@ -237,14 +244,18 @@ def run(args):
             return venture_ops.standard_kpis()
         if args.command == "operator" and args.action == "overview":
             return venture_ops.status(store)
-        if args.command == "signal" and args.action in ("template", "capabilities"):
-            return signal_intake.template() if args.action == "template" else signal_intake.capabilities(store)
+        if args.command == "signal" and args.action in ("template", "capabilities", "web-plan"):
+            if args.action == "template":
+                return signal_intake.template()
+            if args.action == "capabilities":
+                return signal_intake.capabilities(store)
+            return no_api_research.plan(store, args.topic, args.lane, args.limit, args.since_days)
         with locked(store):
             if args.command == "blue-ocean":
                 if args.action == "prepare":
-                    return blue_ocean.prepare(store, args.limit, args.no_refresh, args.max_requests, args.sector_batch)
+                    return blue_ocean.prepare(store, args.limit, args.no_refresh, args.max_requests, args.sector_batch, args.topic)
                 if args.action == "run":
-                    prepared = blue_ocean.prepare(store, args.limit, args.no_refresh, args.max_requests, args.sector_batch)
+                    prepared = blue_ocean.prepare(store, args.limit, args.no_refresh, args.max_requests, args.sector_batch, args.topic)
                     report = blue_ocean.brief(store)
                     return {"discovery": prepared, "brief": report, "operator": venture_ops.status(store),
                             "prevalidation": prevalidation.bootstrap(store, limit=min(args.limit, 5), apply=False),
@@ -298,6 +309,8 @@ def run(args):
                     return founder_ops.weekly_brief(store, args.week_start, args.apply)
             if args.command == "signal" and args.action == "import":
                 return signal_intake.import_signal(store, json.loads(Path(args.file).read_text()))
+            if args.command == "signal" and args.action == "batch-import":
+                return signal_intake.import_signals(store, json.loads(Path(args.file).read_text()))
             if args.command == 'workbench':
                 return workbench.execute(store, args.action, args)
             if args.command == "application":
@@ -499,11 +512,13 @@ def main():
     r.add_argument("--no-refresh", action="store_true", help="Use stored evidence only")
     r.add_argument("--max-requests", type=int)
     r.add_argument("--sector-batch", type=int)
+    r.add_argument("--topic", help="이번 수동 공개 웹 조사에서 좁힐 고객 문제·시장 주제")
     r = actions.add_parser("run", help="One command for collection, portfolio sync, reassessment and brief")
     r.add_argument("--limit", type=int, default=6)
     r.add_argument("--no-refresh", action="store_true")
     r.add_argument("--max-requests", type=int)
     r.add_argument("--sector-batch", type=int)
+    r.add_argument("--topic", help="이번 수동 공개 웹 조사에서 좁힐 고객 문제·시장 주제")
     actions.add_parser("onboard", help="Start the guided no-key founder workflow")
     actions.add_parser("template", help="Return the candidate contract Codex fills for the user")
     r = actions.add_parser("save", help="Save or revise an evidence-linked market-whitespace candidate")
@@ -570,7 +585,14 @@ def main():
     actions = s.add_subparsers(dest="action", required=True)
     actions.add_parser("template")
     actions.add_parser("capabilities")
+    r = actions.add_parser("web-plan", help="Create a bounded public-web research plan that needs no API key")
+    r.add_argument("--topic")
+    r.add_argument("--lane", action="append", choices=tuple(no_api_research.LANES))
+    r.add_argument("--limit", type=int, default=12)
+    r.add_argument("--since-days", type=int, default=30)
     r = actions.add_parser("import")
+    r.add_argument("--file", required=True)
+    r = actions.add_parser("batch-import", help="Atomically save 1-50 actually reviewed public sources")
     r.add_argument("--file", required=True)
     s = sub.add_parser("refresh")
     s.add_argument("--topic", action="append")

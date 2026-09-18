@@ -640,7 +640,9 @@ def source_capabilities(store):
     registered = {row["id"]: row for row in assets("sources.json")}
     available_keys = credentials(store.workspace)
     enabled = set(store.config.get("enabled_sources", []))
-    lanes = defaultdict(lambda: {"live_sources": [], "available_import": True, "status": "import_or_browser_review"})
+    lanes = defaultdict(lambda: {"live_sources": [], "available_import": True,
+                                 "credential_free_public_web": True,
+                                 "status": "on_demand_public_web_review"})
     for source, lane in SOURCE_LANES.items():
         spec = registered.get(source)
         if spec and spec.get("adapter"):
@@ -657,9 +659,10 @@ def source_capabilities(store):
                         "enabled": source in enabled, "credential_ready": not missing,
                         "missing_key_names": missing, "last_attempt": dict(latest) if latest else None,
                         "live_verified_in_this_workspace": bool(latest and latest["status"] == "ok"),
-                        "fallback": "reviewed_public_page_or_authorized_export" if not spec.get("adapter") else None})
+                        "fallback": "on_demand_public_web_review_or_authorized_export"})
     return {"lanes": dict(lanes), "source_details": details,
-            "boundary": "enabled_connector만 자동 수집 대상입니다. 나머지는 Codex 공개 웹 검토 또는 허용 export 접수 경로입니다."}
+            "operating_mode": "on_demand", "api_credentials_required_for_core": False,
+            "boundary": "핵심 경로는 Codex 공개 웹 원문 검토와 일괄 접수입니다. connector는 선택 사항이며 플랫폼 전수조사를 뜻하지 않습니다."}
 
 
 def source_yield(store):

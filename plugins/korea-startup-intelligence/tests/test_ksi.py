@@ -55,11 +55,13 @@ class WorkspaceTest(unittest.TestCase):
         self.store.close()
         atomic_json(self.workspace / "config.json", {"schema_version": 1, "enabled_sources": ["google_news_rss"]})
         self.store = Store(self.workspace)
-        self.assertEqual(self.store.config["workspace_profile_version"], 6)
+        self.assertEqual(self.store.config["workspace_profile_version"], 7)
         self.assertEqual(self.store.config["product_focus"], "blue_ocean_discovery_and_personal_founder_operations")
+        self.assertEqual(self.store.config["operating_mode"], "on_demand")
+        self.assertFalse(self.store.config["scheduler_required"])
         self.assertEqual(self.store.config["enabled_sources"], ["google_news_rss"])
         persisted = json.loads((self.workspace / "config.json").read_text())
-        self.assertEqual(persisted["optional_modules"], ["grants", "competitions", "team_workbench", "telegram"])
+        self.assertEqual(persisted["optional_modules"], ["grants", "competitions", "team_workbench"])
 
     def test_exact_legacy_default_sources_gain_public_crossref_but_custom_sources_do_not(self):
         self.store.close()

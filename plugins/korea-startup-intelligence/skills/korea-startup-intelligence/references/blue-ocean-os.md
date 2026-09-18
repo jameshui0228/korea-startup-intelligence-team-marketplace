@@ -8,8 +8,8 @@
 
 사용자는 내부 CLI나 JSON을 외울 필요가 없다. Codex가 자연어 요청을 다음 흐름으로 변환한다.
 
-1. `blue-ocean onboard`로 첫 설정/기존 자료를 확인하고 `blue-ocean run`으로 허용된 소스를 갱신·기존 자료 승계·재평가·브리핑까지 진행한다. `prepare`도 기본적으로 실제 허용 소스를 수집한다. 오프라인 재검토에만 `--no-refresh`를 붙인다.
-2. 실제 공개 원문과 허용 자료를 읽고 관측을 저장한다.
+1. `blue-ocean onboard`로 첫 설정/기존 자료를 확인하고 `blue-ocean run --topic "고객 문제"`으로 무키 수집·공개 웹 조사 계획·기존 자료 승계·재평가·브리핑을 준비한다. `--no-refresh`는 저장 자료 재검토에 쓴다.
+2. Codex가 실제 공개 원문과 허용 자료를 읽고 `signal batch-import`로 관측을 일괄 저장한다. 검색 결과 조각은 저장하지 않는다.
 3. radar에서 저장한 가설은 같은 dossier 또는 opportunity_key로 블루오션 포트폴리오에 자동 승계된다. 기회 카드가 없는 기존 dossier도 승계한다.
    기존 카드의 승계는 `blue-ocean sync`로 미리 보고 `blue-ocean sync --apply`로 적용한다.
 4. `blue-ocean save`: 독립 후보의 시장공백, 신호 상태, 반대 근거, 다음 행동을 저장한다.
@@ -93,5 +93,5 @@ detected → watching → researching → validating → building → launched �
 ## API와 실행 경계
 
 추가 API 키가 없어도 현재 Codex의 공개 웹 접근과 공식 자료로 실행한다. API는 빈도와 구조화를 높이는 선택 사항이다.
-웹 접근이 없으면 저장 자료의 기준일을 밝히고 최신 확인을 주장하지 않는다. 로컬 앱과 컴퓨터가 꺼져 있고 외부 서버가 없으면
-주기 실행은 동작하지 않는다. 다시 실행할 때 저장된 `review_after`와 변경 이력을 이용해 따라잡는다.
+예약·heartbeat·백그라운드 실행은 사용하지 않는다. 웹 접근이 없으면 저장 자료의 기준일을 밝히고 최신 확인을 주장하지 않는다.
+다시 사용자가 호출할 때 저장된 `review_after`·변경 이력·새 공개 웹 조사를 이용해 따라잡는다.

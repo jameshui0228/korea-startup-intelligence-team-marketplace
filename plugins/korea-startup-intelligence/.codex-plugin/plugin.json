@@ -1,6 +1,6 @@
 {
   "name": "korea-startup-intelligence",
-  "version": "0.5.3",
+  "version": "0.6.0",
   "description": "한국 산업·SNS 초기 신호를 근거 기반 블루오션 가설로 연결하고 개인 창업 실행까지 관리하는 허구김 에이전트",
   "author": {
     "name": "James Hui"
@@ -9,7 +9,7 @@
   "interface": {
     "displayName": "허구김",
     "shortDescription": "한국 초기 신호 · 블루오션 발견 · 개인 창업 운영",
-    "longDescription": "허용된 최신 소스와 검토 자료를 연결해 한국의 고객 문제와 공급 공백을 조사합니다. 실험 결과가 없어도 공개자료·대안·채널·가정 범위·첫 검증 준비를 만들고, 실제 고객 결과는 미확인으로 보존합니다. 후보부터 실험·작업·월간 예산·출시 KPI까지 관리하며 외부 연락·지출, 사업 성공·예측 정확도는 보장하지 않습니다.",
+    "longDescription": "API 키나 예약 자동화 없이, 사용자가 호출한 현재 작업에서 공개 웹 원문을 조사해 한국의 고객 문제와 공급 공백을 정리합니다. 검토 근거를 후보·실험·작업·월간 예산·출시 KPI에 연결하고, 실제 고객 결과는 미확인으로 보존합니다. 외부 연락·지출, 사업 성공·예측 정확도는 보장하지 않습니다.",
     "developerName": "James Hui",
     "category": "Productivity",
     "capabilities": [

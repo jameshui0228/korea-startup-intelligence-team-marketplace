@@ -901,11 +901,12 @@ def transition(store, payload):
             "assessment": assess(store, updated)}
 
 
-def prepare(store, limit=6, no_refresh=False, max_requests=None, sector_batch=None):
+def prepare(store, limit=6, no_refresh=False, max_requests=None, sector_batch=None, topic=None):
     if type(limit) is not int or not 1 <= limit <= 12:
         raise ValueError("limit: 1~12 범위가 필요합니다.")
     from .research import research_plan
     from .engine import refresh
+    from .no_api_research import plan as public_web_plan
     collection = None
     if not no_refresh:
         collection = refresh(store, budget=max_requests if max_requests is not None else min(store.config.get("max_requests", 30), 18),
@@ -913,6 +914,7 @@ def prepare(store, limit=6, no_refresh=False, max_requests=None, sector_batch=No
     adoption_applied = sync(store, apply=True)
     reassessment = reassess_all(store, apply=True, trigger="blue_ocean_prepare")
     plan = research_plan(store, limit)
+    web_plan = public_web_plan(store, topic=topic, limit=12)
     adoption = sync(store, apply=False)
     unmanaged = [item for item in adoption["items"] if item["action"] == "adopt"]
     return {"mode": "blue_ocean_discovery", "api_key_required": False,
@@ -921,6 +923,7 @@ def prepare(store, limit=6, no_refresh=False, max_requests=None, sector_batch=No
             "portfolio_sync": adoption,
             "portfolio_sync_applied": adoption_applied, "automatic_reassessment": reassessment,
             "research_tasks": plan.get("tasks", []),
+            "public_web_plan": web_plan,
             "search_lanes": [
                 "고객 행동·반복 수작업·현재 지출", "검색·커뮤니티·리뷰의 약한 신호",
                 "채용·조달·특허·규제·기술 가격 변화", "해외 선행 사례와 한국 대체재",

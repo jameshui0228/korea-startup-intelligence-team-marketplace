@@ -7,7 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 TABLE = ROOT / "ACCEPTANCE_76.md"
-PATTERN = re.compile(r"^\|\s*(\d+)\s*\|\s*(구현|부분|연결 대기|실측 대기|설정 대기)\s*\|(.+)\|$")
+PATTERN = re.compile(r"^\|\s*(\d+)\s*\|\s*(구현|부분|무키 구현|실측 대기|범위 제외)\s*\|(.+)\|$")
 
 
 def main():

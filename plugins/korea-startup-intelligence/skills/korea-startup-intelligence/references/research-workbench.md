@@ -103,8 +103,8 @@ current_workaround, team_fit, supply_access, support_fit
 분모는 서로 다른 원 생산자이며 사람 수·고객 빈도·감정 분석이 아니다. 현재 대량 SNS 본문 분석기는 없다.
 
 `research-work report --period daily|weekly|monthly`는 최근 1/7/30일의 9섹션 보고서와 조사 공백·연결 상태·피드백을 만든다.
-`research-work maintenance`는 기존 heartbeat에서 호출하며 KST 일/ISO 주/월이 바뀌었을 때 해당 로컬 보고서만 갱신한다.
-보고서 생성은 알림이나 새로운 scheduler를 만들지 않는다. 명시적으로 원할 때 언제든 report로 갱신할 수 있다.
+`research-work maintenance`는 사용자가 요청한 수동 실행에서 KST 일/ISO 주/월이 바뀌었을 때 해당 로컬 보고서만 갱신한다.
+보고서 생성은 알림이나 scheduler를 만들지 않는다. 명시적으로 원할 때 언제든 report로 갱신할 수 있다.
 주간에는 반례·사용자 피드백·실험 결과, 월간에는 분야 편중·소스 품질·적중/실패 분모를 검토한다.
 현재 보고서는 최신 rolling-window 자료이며 장기 플랫폼 데이터 보유권·예측 성능·모델 학습을 보증하지 않는다.
 

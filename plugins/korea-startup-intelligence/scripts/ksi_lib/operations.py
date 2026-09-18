@@ -1,6 +1,7 @@
-"""Durable research-cycle completion and observable Telegram operation.
+"""Durable research-cycle completion and observable optional delivery.
 
-A trigger label is a caller's statement, not proof that the app scheduler ran.
+The product defaults to manual runs. A legacy trigger label is a caller's
+statement, not proof that an app scheduler ran.
 No model calls, hidden daemon, or autonomous recovery of ambiguous sends.
 """
 import json
@@ -154,22 +155,23 @@ def health(store, acknowledge=False):
     recent = runs(store)
     heartbeat = store.db.execute("SELECT packet_id,started_at,completed_at,state FROM radar_runs WHERE trigger='heartbeat' AND automation_id IS ? ORDER BY rowid DESC LIMIT 1", (cfg["scheduler"].get("automation_id"),)).fetchone()
     issues = []
-    if not delivery["enabled"] or not delivery["binding_matches"] or delivery["blocked_reason"]:
+    if cfg.get("telegram_enabled") and (not delivery["enabled"] or not delivery["binding_matches"] or delivery["blocked_reason"]):
         issues.append("telegram_not_ready")
     issues.extend("delivery_attention:" + r["id"] + ":" + r["status"] for r in delivery["needs_attention"])
     overdue = now() - timedelta(minutes=max(90, cfg["check_interval_minutes"] * 3))
     unfinished = store.db.execute("SELECT COUNT(*) FROM radar_runs WHERE state IN ('prepared','reviewing') AND started_at<?", (stamp(overdue),)).fetchone()[0]
     if unfinished:
         issues.append("unfinished_research_cycle")
-    scheduler_status = cfg["scheduler"].get("status", "not_configured")
-    if scheduler_status == "ACTIVE":
+    scheduler_status = cfg["scheduler"].get("status", "not_required")
+    scheduler_required = cfg.get("operating_mode") == "scheduled" and cfg.get("scheduler_required")
+    if scheduler_required and scheduler_status == "ACTIVE":
         if not heartbeat:
             issues.append("no_recorded_heartbeat_run")
         elif parse_date(heartbeat["started_at"]) < overdue:
             issues.append("heartbeat_receipt_overdue")
         elif heartbeat["state"] == "failed":
             issues.append("latest_heartbeat_failed")
-    elif scheduler_status not in ("not_configured", None):
+    elif scheduler_required and scheduler_status not in ("not_configured", None):
         # A stale local registration must never be interpreted as a working
         # scheduler. Preserve the reported state so a user can distinguish a
         # deliberately unconfigured workspace from a deleted/paused job.
@@ -182,7 +184,9 @@ def health(store, acknowledge=False):
               "notification_needed": changed, "telegram": delivery, "recent_runs": recent,
               "latest_recorded_heartbeat": dict(heartbeat) if heartbeat else None,
               "scheduler_registration": cfg["scheduler"],
-              "boundary": "Heartbeat labels are caller-reported. A local health check cannot run or notify while the host/app is off."}
+              "operating_mode": cfg.get("operating_mode", "on_demand"),
+              "scheduler_required": bool(scheduler_required),
+              "boundary": "기본은 사용자가 호출할 때만 실행하는 수동 모드입니다. 상태 확인은 예약 실행이나 외부 알림을 만들지 않습니다."}
     if acknowledge:
         atomic_json(path, {"signature": signature, "acknowledged_at": stamp()})
     atomic_json(store.workspace / "reports/radar-health.json", result)

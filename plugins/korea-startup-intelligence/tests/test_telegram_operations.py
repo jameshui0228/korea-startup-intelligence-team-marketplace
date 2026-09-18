@@ -386,29 +386,33 @@ class TelegramOperationsTest(unittest.TestCase):
             refresh.assert_not_called()
 
     def test_health_does_not_repeatedly_notify_unchanged_issue(self):
+        cfg = radar.ensure_radar(self.store)
+        cfg["telegram_enabled"] = True
+        atomic_json(self.workspace / "radar.json", cfg)
         self.assertTrue(operations.health(self.store)["notification_needed"])
         operations.health(self.store, acknowledge=True)
         self.assertFalse(operations.health(self.store)["notification_needed"])
         self.bound()
         self.assertTrue(operations.health(self.store)["notification_needed"])
 
-    def test_manual_runs_do_not_claim_scheduler_proof(self):
-        self.bound()
+    def test_on_demand_runs_do_not_require_scheduler_proof(self):
         cfg = radar.ensure_radar(self.store)
         cfg["scheduler"] = {"status": "ACTIVE", "automation_id": "fixture"}
         atomic_json(self.workspace / "radar.json", cfg)
         radar.prepare(self.store, no_refresh=True)
         health = operations.health(self.store)
-        self.assertIn("no_recorded_heartbeat_run", health["issues"])
+        self.assertNotIn("no_recorded_heartbeat_run", health["issues"])
+        self.assertFalse(health["scheduler_required"])
+        self.assertEqual(health["scheduler_registration"]["status"], "not_required")
         self.assertIsNone(health["latest_recorded_heartbeat"])
 
-    def test_missing_scheduler_registration_is_reported_as_attention(self):
+    def test_stale_missing_scheduler_is_not_an_on_demand_error(self):
         cfg = radar.ensure_radar(self.store)
         cfg["scheduler"] = {"status": "MISSING", "automation_id": "deleted-fixture"}
         atomic_json(self.workspace / "radar.json", cfg)
         health = operations.health(self.store)
-        self.assertEqual(health["status"], "attention")
-        self.assertIn("scheduler_not_active:missing", health["issues"])
+        self.assertEqual(health["status"], "ok")
+        self.assertNotIn("scheduler_not_active:missing", health["issues"])
         self.assertNotIn("no_recorded_heartbeat_run", health["issues"])
 
 

@@ -13,7 +13,8 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from ksi_lib import blue_ocean, founder_ops, signal_intake, venture_intelligence, venture_ops
+from ksi_lib import (blue_ocean, founder_ops, no_api_research, signal_intake,
+                     venture_intelligence, venture_ops)
 from ksi_lib.model import Store, init_workspace, now, observation, stamp
 
 
@@ -52,8 +53,10 @@ class VentureIntelligenceTest(unittest.TestCase):
 
     def test_prepare_collects_by_default_and_can_skip_network(self):
         with patch("ksi_lib.engine.refresh", return_value={"status": "ok", "requests_made": 2}) as collect:
-            result = blue_ocean.prepare(self.store, limit=2)
+            result = blue_ocean.prepare(self.store, limit=2, topic="돌봄 기록")
         self.assertEqual(result["collection"]["requests_made"], 2)
+        self.assertEqual(result["public_web_plan"]["topic"], "돌봄 기록")
+        self.assertFalse(result["public_web_plan"]["credentials_required"])
         collect.assert_called_once()
         with patch("ksi_lib.engine.refresh") as collect:
             result = blue_ocean.prepare(self.store, limit=2, no_refresh=True)
@@ -87,6 +90,44 @@ class VentureIntelligenceTest(unittest.TestCase):
         self.assertEqual(graph["observation_count"], 2)
         self.assertEqual(graph["clusters"][0]["gap_status"], "unresolved")
         self.assertEqual(signal_intake.import_signal(self.store, signal)["status"], "unchanged")
+
+    def test_on_demand_public_web_plan_needs_no_credentials_or_scheduler(self):
+        result = no_api_research.plan(self.store, "야간 돌봄 인수인계", limit=12)
+        self.assertFalse(result["credentials_required"])
+        self.assertFalse(result["scheduled_or_background_execution"])
+        self.assertEqual(len(result["tasks"]), 12)
+        self.assertEqual({task["lane"] for task in result["tasks"]}, set(no_api_research.LANES))
+        self.assertTrue(all(task["save_with"].startswith("signal batch-import") for task in result["tasks"]))
+        with self.assertRaises(ValueError):
+            no_api_research.plan(self.store, "돌봄", lanes=["unknown"])
+        with self.assertRaises(ValueError):
+            no_api_research.plan(self.store, "돌봄", limit=25)
+
+    def test_signal_batch_validates_every_item_before_writing(self):
+        base = {
+            "source": "jobs", "kind": "job", "topic": "돌봄 업무", "title": "돌봄 기록 담당 채용",
+            "url": "https://example.com/job/batch-1", "event_at": stamp(now() - timedelta(hours=1)),
+            "geography": "KR", "domain_ids": ["KR-180"], "read_scope": "relevant_sections",
+            "summary": "원 고용주 공고의 업무 부분에 기록 정리 업무가 기재되어 있다.",
+            "origin_group": "batch-employer", "origin_note": "고용주 원 공고", "reviewer": "test",
+            "collection_basis": "public_source_verified", "limitations": ["한 공고"],
+            "demand_or_supply": "context",
+        }
+        bad = {**base, "url": "https://example.com/job/batch-2", "title": "잘못된 두 번째 자료",
+               "summary": "contact test@example.com"}
+        before = len(self.store.observations())
+        with self.assertRaises(ValueError):
+            signal_intake.import_signals(self.store, [base, bad])
+        self.assertEqual(len(self.store.observations()), before)
+        self.assertEqual(self.store.db.execute("SELECT COUNT(*) FROM source_reviews").fetchone()[0], 0)
+        second = {**base, "source": "regulation", "kind": "regulation",
+                  "url": "https://example.com/law/batch-2", "title": "돌봄 기록 규정 예고",
+                  "summary": "공식 예고 원문에서 적용 대상과 예정 시행일을 확인했다.",
+                  "origin_group": "official-regulator", "origin_note": "소관 부처 원문"}
+        result = signal_intake.import_signals(self.store, [base, second])
+        self.assertEqual(result["saved"], 2)
+        self.assertTrue(result["atomic_validation"])
+        self.assertEqual(len(self.store.observations()), before + 2)
 
     def test_search_attention_is_not_customer_demand_or_a_market_gap(self):
         for index in (1, 2):

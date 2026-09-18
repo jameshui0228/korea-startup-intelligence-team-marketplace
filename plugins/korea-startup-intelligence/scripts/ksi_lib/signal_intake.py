@@ -38,7 +38,7 @@ def template():
             "warning": "원문을 실제 읽은 후 자기 말로 요약; 접근 제한 우회·개인정보·키 저장 금지"}
 
 
-def import_signal(store, payload):
+def _prepare_signal(store, payload):
     if not isinstance(payload, dict):
         raise ValueError("signal 입력은 JSON 객체여야 합니다.")
     source = payload.get("source")
@@ -96,7 +96,6 @@ def import_signal(store, payload):
     speaker_role = payload.get("speaker_role", "unknown")
     if speaker_role not in ("customer", "provider", "advertiser", "expert", "unknown"):
         raise ValueError("speaker_role은 customer/provider/advertiser/expert/unknown 중 하나입니다.")
-    radar.ensure_radar(store)
     row = observation(source, kind, payload["topic"], payload["title"], url, stamp(event),
                       geography=payload.get("geography", "unknown"), domain_ids=domains,
                       content_scope="reviewed_" + scope, collection_basis=basis,
@@ -125,21 +124,59 @@ def import_signal(store, payload):
     if not payload.get("force_recheck", False) and previous_row and previous_review and \
             all(previous_row.get(field) == row.get(field) for field in stable_fields) and \
             all(previous_review.get(field) == review.get(field) for field in review_fields):
-        return {"status": "unchanged", "evidence_id": row["id"], "direct_api_collected": False,
-                "portfolio_reassessment": None}
-    with store.db:
+        return {"row": row, "review": review, "unchanged": True}
+    return {"row": row, "review": review, "unchanged": False}
+
+
+def _persist_prepared(store, prepared):
+    row, review = prepared["row"], prepared["review"]
+    if not prepared["unchanged"]:
         store.put_observation(row)
         store.db.execute("INSERT OR REPLACE INTO source_reviews VALUES (?,?,?,?)",
                          (row["id"], review["reviewed_at"], radar.evidence_signature(row),
                           json.dumps(review, ensure_ascii=False)))
+
+
+def import_signals(store, payloads):
+    """Validate the whole reviewed batch before any observation is written."""
+    if not isinstance(payloads, list) or not 1 <= len(payloads) <= 50:
+        raise ValueError("signal batch 입력은 1~50개의 JSON 객체 목록이어야 합니다.")
+    radar.ensure_radar(store)
+    prepared = [_prepare_signal(store, payload) for payload in payloads]
+    ids = [item["row"]["id"] for item in prepared]
+    if len(ids) != len(set(ids)):
+        raise ValueError("한 batch 안에 같은 원문 관측이 중복되었습니다.")
+    with store.db:
+        for item in prepared:
+            _persist_prepared(store, item)
+    saved = [item for item in prepared if not item["unchanged"]]
+    events = [event for item in saved for event in blue_ocean.note_evidence_change(store, item["row"]["id"])]
+    reassessment = blue_ocean.reassess_all(store, apply=True, trigger="signal_batch_intake") if saved else None
+    return {"status": "reviewed_signal_batch_saved" if saved else "unchanged",
+            "received": len(payloads), "saved": len(saved), "unchanged": len(prepared) - len(saved),
+            "evidence_ids": ids, "blue_ocean_events": events,
+            "portfolio_reassessment": reassessment, "direct_api_collected": False,
+            "platform_census": False, "atomic_validation": True}
+
+
+def import_signal(store, payload):
+    radar.ensure_radar(store)
+    prepared = _prepare_signal(store, payload)
+    row, review = prepared["row"], prepared["review"]
+    if prepared["unchanged"]:
+        return {"status": "unchanged", "evidence_id": row["id"], "direct_api_collected": False,
+                "portfolio_reassessment": None}
+    with store.db:
+        _persist_prepared(store, prepared)
     events = blue_ocean.note_evidence_change(store, row["id"])
     reassessment = blue_ocean.reassess_all(store, apply=True, trigger="signal_intake")
-    return {"status": "reviewed_signal_saved", "evidence_id": row["id"], "source": source,
-            "read_scope": scope, "blue_ocean_events": events, "reassessment": reassessment,
+    return {"status": "reviewed_signal_saved", "evidence_id": row["id"], "source": row["source"],
+            "read_scope": review["read_scope"], "blue_ocean_events": events, "reassessment": reassessment,
             "direct_api_collected": False, "platform_census": False}
 
 
 def capabilities(store):
     return {"input_template": template(), "sources": sorted(FAMILIES),
             "live_and_import_lanes": venture_intelligence.source_capabilities(store),
-            "boundary": "직접 API가 없는 곳은 공개 원문 또는 권한 있는 export를 실제 검토한 뒤 접수합니다."}
+            "batch_limit": 50, "credential_free_web_plan": True,
+            "boundary": "직접 API가 없는 곳은 공개 원문 또는 권한 있는 export를 실제 검토한 뒤 일괄 접수합니다."}
