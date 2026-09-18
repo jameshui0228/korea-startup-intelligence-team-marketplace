@@ -50,6 +50,16 @@ class WorkspaceTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             Store(self.workspace)
 
+    def test_old_workspace_config_gets_safe_product_defaults(self):
+        self.store.close()
+        atomic_json(self.workspace / "config.json", {"schema_version": 1, "enabled_sources": ["google_news_rss"]})
+        self.store = Store(self.workspace)
+        self.assertEqual(self.store.config["workspace_profile_version"], 2)
+        self.assertEqual(self.store.config["product_focus"], "blue_ocean_discovery_and_venture_lifecycle")
+        self.assertEqual(self.store.config["enabled_sources"], ["google_news_rss"])
+        persisted = json.loads((self.workspace / "config.json").read_text())
+        self.assertEqual(persisted["optional_modules"], ["grants", "competitions", "team_workbench", "telegram"])
+
     def test_missing_credentials_not_queried(self):
         with patch("ksi_lib.engine.credentials", return_value={}), patch("ksi_lib.engine.collect") as call:
             r = refresh(self.store, ["test"], ["naver_news"], sector_batch=0)

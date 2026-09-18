@@ -50,13 +50,18 @@ def doctor(store):
                         "credential_present": all(k in keys for k in spec["credentials"]) if spec["credentials"] else None,
                         "last_attempt": dict(latest) if latest else None,
                         "access": spec["access"]})
+    sync_preview = blue_ocean.sync(store, apply=False)
+    validation_plans = store.records("validation_plan")
     return {"workspace": str(store.workspace), "sqlite_integrity": store.db.execute("PRAGMA integrity_check").fetchone()[0],
+            "workspace_profile_version": store.config.get("workspace_profile_version"),
             "sources": sources, "coverage": {k: v for k, v in coverage(store).items() if k != "unqueried_domains"}, "research_references": len(assets("research_index.json")),
             "credentials_values_logged": False,
             "scheduler": radar.ensure_radar(store)["scheduler"] if (store.workspace / "radar.json").exists() else {"status": "not_configured"},
             "telegram": telegram.status(store) if (store.workspace / "radar.json").exists() else {"enabled": False},
             "blue_ocean": {"candidates": len(store.records("blue_ocean")),
-                           "next_actions": len(blue_ocean.next_actions(store, 50)["items"])},
+                           "next_actions": len(blue_ocean.next_actions(store, 50)["items"]),
+                           "unmanaged_radar_hypotheses": sum(i["action"] == "adopt" for i in sync_preview["items"]),
+                           "qualitative_experiments": sum(e.get("method_type") == "qualitative" for e in validation_plans)},
             "learning_boundary": "Persistent evidence and outcome records, not model weight training or guaranteed skill improvement"}
 
 
@@ -138,6 +143,15 @@ def run(args):
             rows = store.records("resolution")
             return {"resolved_forecasts": len(rows), "mean_brier": sum(r["brier_score"] for r in rows) / len(rows) if rows else None,
                     "calibration_validated": False, "note": "No claim of predictive skill from small selected samples; compare baselines and retain misses."}
+        # Pure portfolio reads do not take the run-wide writer lock. SQLite keeps
+        # a consistent read snapshot while an unrelated long research cycle is
+        # active, so status checks no longer fail merely because collection runs.
+        if args.command == "blue-ocean" and args.action == "template":
+            return blue_ocean.template()
+        if args.command == "blue-ocean" and args.action == "status":
+            return blue_ocean.status(store, args.id)
+        if args.command == "blue-ocean" and args.action == "next":
+            return blue_ocean.next_actions(store, args.limit)
         with locked(store):
             if args.command == "blue-ocean":
                 if args.action == "prepare":
@@ -154,6 +168,8 @@ def run(args):
                     return blue_ocean.transition(store, json.loads(Path(args.file).read_text()))
                 if args.action == "brief":
                     return blue_ocean.brief(store)
+                if args.action == "sync":
+                    return blue_ocean.sync(store, args.apply)
             if args.command == 'workbench':
                 return workbench.execute(store, args.action, args)
             if args.command == "application":
@@ -179,6 +195,10 @@ def run(args):
                     return validation.plan(store, json.loads(Path(args.file).read_text()))
                 if args.action == "result":
                     return validation.result(store, json.loads(Path(args.file).read_text()))
+                if args.action == "qualitative-plan":
+                    return validation.qualitative_plan(store, json.loads(Path(args.file).read_text()))
+                if args.action == "qualitative-result":
+                    return validation.qualitative_result(store, json.loads(Path(args.file).read_text()))
                 if args.action == "status":
                     return validation.status(store, args.dossier_id)
             if args.command == "grants":
@@ -358,6 +378,8 @@ def main():
     r = actions.add_parser("transition", help="Move a candidate through validation and execution with stage gates")
     r.add_argument("--file", required=True)
     actions.add_parser("brief", help="Write a concise personal founder brief from the current portfolio")
+    r = actions.add_parser("sync", help="Preview or apply evidence-preserving adoption of existing radar hypotheses")
+    r.add_argument("--apply", action="store_true", help="Write the previewed portfolio adoption; never advances stages automatically")
     s = sub.add_parser("refresh")
     s.add_argument("--topic", action="append")
     s.add_argument("--source", action="append")
@@ -457,7 +479,7 @@ def main():
     r.add_argument("--dossier-id")
     s = sub.add_parser("validation", help="Immutable prespecified experiments and separately recorded measured results")
     actions = s.add_subparsers(dest="action", required=True)
-    for name in ("plan", "result"):
+    for name in ("plan", "result", "qualitative-plan", "qualitative-result"):
         r = actions.add_parser(name)
         r.add_argument("--file", required=True)
     r = actions.add_parser("status")

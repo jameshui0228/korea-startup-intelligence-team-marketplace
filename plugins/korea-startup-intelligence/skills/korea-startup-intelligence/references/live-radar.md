@@ -46,7 +46,8 @@
    실패/거절/반례도 기록한다. 조회 없는 분야를 검토 완료로 표시하지 않는다.
 6. `radar finish --packet-id "이번ID"`로 대기 메시지 미리보기와 검토 완료 여부를 확인한다.
    실제 읽은 내용·수신 대상·문구를 검토한 뒤 `radar finish --packet-id "이번ID" --send`로 회차를 마친다.
-   이 명령이 현행 품질 재검사 → queue → preview → deliver → maintenance와 완료 영수증을 처리한다.
+   이 명령이 현행 품질 재검사 → 블루오션 포트폴리오 승계·판단 변화 브리핑 → queue → preview → deliver → maintenance와 완료 영수증을 처리한다.
+   레이더 카드가 포트폴리오로 옮겨져도 조사 가설 상태와 원본 근거 성격을 유지하며 자동으로 validating/building 단계로 올리지 않는다.
    검토하지 않은 주제가 남으면 전송하지 않는다. 이미 완료한 동일 회차는 저장된 영수증을 반환하고 추가 전송하지 않는다.
    전송 후 완료 기록 전에 중단돼도 회차에 연결된 시도 영수증을 재사용하며 같은 회차에서 다시 보내지 않는다.
    미연결 상태도 로컬 기록을 완료하되 전송은 막힌다. `telegram status`에서 enabled/binding_matches/blocked_reason을 확인한다.

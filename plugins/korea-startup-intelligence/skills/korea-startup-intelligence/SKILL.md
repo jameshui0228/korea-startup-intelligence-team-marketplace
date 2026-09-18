@@ -27,6 +27,8 @@ description: "한국의 약한 시장 신호와 아직 충분히 해결되지 �
 2. `python3 "PLUGIN/scripts/ksi.py" --workspace "WORKSPACE" init`은 기존 파일을 덮어쓰지 않는다.
 3. `FOUNDER_CONTEXT.md`를 읽는다. 예산·지역·가용 시간·역량·접근 가능한 고객은 미확인 상태를 유지하고 가장 중요한 질문만 한다.
    기본 탐색·재개에는 `blue-ocean prepare`와 [블루오션 운영체제](references/blue-ocean-os.md)를 사용한다.
+   기존 radar 가설이 있으면 prepare의 portfolio_sync를 확인하고, 사용자가 운영을 요청한 현재 워크스페이스에서는
+   `blue-ocean sync --apply`로 근거 성격을 보존해 승계한다. founder가 직접 관리한 같은 key는 자동 덮어쓰지 않는다.
    JSON은 Codex가 자연어 요구와 실제 자료로 작성한다. 사용자가 명령·필드명을 외우게 하지 않는다.
 4. 전 분야 탐색은 `blue-ocean prepare`, `market-map --limit 400`, `research-work plan --limit 6`으로 기존 후보·조사 공백·다음 행동을 파악한다.
    특정 아이디어/서류 요청은 관련 기록만 읽어 바로 해당 산출물을 개선한다. 매번 전 분야를 다시 조사하지 않는다.
@@ -88,6 +90,7 @@ Codex가 실제 자료를 열어 판단한 후 `radar review-source`, `radar sub
 조사를 실제 수행할 때 `research-work start`/`complete`로 근거와 보류 이유를 기록한다. 단순 조회를 조사 완료로 바꾸지 않는다.
 사업 가설을 구체화할 때 `venture-review`로 고객 질문·대안·반대 판단을 남긴다.
 실험을 실행하기 전 `validation plan`, 실행 후 `validation result`로 기록한다. 기준 통과는 시장 검증 완료가 아니다.
+수치로 환원하기 부적절한 인터뷰·관찰은 qualitative-plan/result로 사전 사례·코드·반례 탐색을 고정한다.
 400분야 분류, 실제 쿼리 범위, dossier 연결 분야, 검증된 고객 결과는 서로 다른 분모다.
 market-map은 현재 저장 근거의 분야별 접근 지도이며 실시간 전 시장 숙련 증명은 아니다.
 

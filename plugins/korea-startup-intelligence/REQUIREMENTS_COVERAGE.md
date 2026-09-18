@@ -11,12 +11,12 @@
 - tests/test_radar.py: 원문 검토·카드·Telegram 수신 대상·전송 실패/중복.
 - tests/test_research.py: 24항목 근거·고객/반례·후속 조사·3구간 가속·공고 조건.
 - tests/test_upgrade.py: YouTube 집계·고정 연결 확인·조사 피드백·일/주/월 보고서.
-- tests/test_venture_validation.py: 여섯 창업자 질문·대안·검토 노후화·기각, 변경 불가 사전 실험·분모·기간·단위·실패·미실행.
+- tests/test_venture_validation.py: 여섯 창업자 질문·대안·검토 노후화·기각, 변경 불가 수치/정성 사전 실험·사례/분모·기간·단위·반례·실패·미실행.
 - tests/test_radar_reliability.py: 급등어 편중 완화, 실제 source registry의 초기 출처/분야 배분과 대기 주제 공정성.
 - tests/test_research_agenda.py: 근거 있는 조사 완료·실패 검색·보류·재개·재방문·출처 변화·결과 분모.
 - tests/test_application_market.py: 키/네트워크/Telegram 없이 시장 지도와 지원서 작업, 출처·공식 조건·예산·발표·심사 답변·변경 검사.
 - tests/test_application_revisions.py: 기존 본문 보존, 버전별 재검토, 이전 검토 재사용 차단, 원문 재해석/만료, 출처 색인, 수정 우선순위, 키 없는 수정·검토 왕복.
-- tests/test_blue_ocean.py: 시장공백 후보의 근거 상태·생명주기·단계 우회 차단·다음 행동·개인 포트폴리오 브리핑·무키 시작.
+- tests/test_blue_ocean.py: 시장공백 후보의 주장별 근거 연결·생명주기·단계 우회 차단·레이더 승계·변화 브리핑·중복 경고·무키 시작·읽기 잠금 분리.
 - 제품 단계별 질문 우선순위·현재 답 재사용·오래된 답 재검토·기각 유지도 venture/validation 테스트에 포함.
 - gstack 관련 원문을 특정 commit에서 검토하고 고객 질문·대안 비교·실패 경로를 재작성했다. venture-review/validation CLI와 기존 조사/보고서에 연결했으며 gstack 전체 코드 실행·모델 학습은 아니다.
 - 실제 한국 자료 4건을 검토해 2개 dossier와 공식 공고 부분 매칭을 별도 사용자 상태에 저장. 두 후보의 지불/불편 근거 부족이 실제로 차단됨.
@@ -50,12 +50,12 @@
 | M22 다양성 | 부분 구현 | 새 분야 슬롯 확보·복수 BM/분야 | 의미적 다양성·업종별 실제 수요 |
 | M23 트렌드와 사업기회 분리 | 구현+판단 | 고객 문제·현재 행동·지불·전환 근거 gate | 현재 조회수만으로 수요 선언 불가 |
 | M24 데이터 기반 사고 | 부분 구현 | 출처/시각/단위/분모·시계열 검사 | 통계적/인과적 타당성과 외부 감사 |
-| M25 Signal→Hypothesis→Validation | 구현+축적 필요 | dossier/venture_review/validation_plan/result 분리·불변 기준·측정 채점 | 실제 고객 실험·대표성·원자료 진실성 검증 |
+| M25 Signal→Hypothesis→Validation | 구현+축적 필요 | radar→blue_ocean→dossier→수치/정성 validation 연결·불변 기준·결과 이력 | 실제 고객 실험·대표성·원자료 진실성 검증 |
 | M26 API 제공 협업 | 부분 구현 | 개인 키 분리·doctor·연결 우선순위 | 사용자 키/승인·소스별 실제 인증 |
 | M27 일/주/월 업데이트 | 구현+운영 조건 | maintenance·일/주/월 9섹션 rolling 보고서 | 장기 자동 실행 실증·장기 자료 사용권 |
 | M28 Trend Database | 부분 구현 | observations·metric_snapshots·source_reviews | 조회 가능한 전 플랫폼 시계열 아님 |
 | M29 Problem Database | 구현+축적 필요 | dossier→problem·근거·빈도/심각성 미지수 | 실제 반복 문제 사례 축적 |
-| M30 Idea Database | 구현+축적 필요 | blue_ocean/idea/opportunity·revision·상태 전이·feedback | 검증된 유료 수요 사례 축적 |
+| M30 Idea Database | 구현+축적 필요 | opportunity 자동 승계·blue_ocean revision/의존성 사건·상태 전이·변화 브리핑 | 검증된 유료 수요 사례 축적 |
 | M31 Negative Signal | 부분 구현 | contradicts 연결·반례·기각·알림 직전 재검사 | 실패 데이터 편향/누락을 포함한 장기 평가 |
 | M32 창업자의 핵심 질문 | 검사+조사 절차 | 고객·문제·지불·경쟁·최소 검증 질문 | 창업자 자원과 실제 관측 확보 |
 | M33 최종 목표 | 지속 개발 목표 | 근거 기반 실행과 결과 누적 | 완벽·선점·선정·수상 보장 대상 아님 |
@@ -87,7 +87,7 @@
 | T19 Deep Dive | 부분 구현 | 24항목 dossier·원문 위치·반례·후속 과제 | CAC/LTV/고객 실험 실측 |
 | T20 출처 신뢰 | 구현+판단 | read_scope·생산자·검토일·한계·typed edge | 독립적인 사실 감사 아님 |
 | T21 환각 방지 | 검사+판단 | 증거 ID·상태·미상 null·날짜 검증 | 의미 진실성 보장 불가 |
-| T22 새로움 | 부분 구현 | topic/key/증거 signature·변경 종류 | 표현이 다른 의미 중복은 에이전트 검토 |
+| T22 새로움 | 부분 구현 | topic/key/증거 signature·변경 종류·후보 토큰 유사도 경고 | 의미 중복은 자동 병합하지 않고 에이전트 검토 |
 | T23 선별 알림 | 구현+운영 조건 | 현행 품질 재검사·outbox·간격/일한도 | 거짓 알림/유용성 실증 |
 | T24 구체 아이디어 | 부분 구현 | 상황·고객·지불·대안·MVP·첫 실험 | 실제 사용자 검증 |
 | T25 반대 분석 | 부분 구현 | 현상 유지 포함 대안·실패 경로·기각 gate·사전 중단 기준 | 반례의 질과 누락·현장 실험 |
@@ -100,6 +100,7 @@
 네이버는 사용자가 보류했다. YouTube 검색/집계는 구축 사용자 상태에서 live 확인했으며 새 사용자별 키가 필요하다. 기업마당은 실제 키 연결이 남아 있다. K-Startup·KOSIS/ECOS·Instagram 등은 범위/승인/어댑터 작업이 추가로 필요하다. [연결 순서와 한계](skills/korea-startup-intelligence/references/connectors.md)를 확인한다.
 이 연결은 선택적 확장이다. 기본 조사·분석·아이디어·사업계획·발표/심사 작업은 현재 Codex와 공개 웹/사용자 자료로 수행하며 추가 API 키를 요구하지 않는다.
 
-사용자의 최근 우선순위에 따라 외부 서버·LLM API·Telegram 추가 개발은 보류하고 플러그인 지능과 검증 기능을 강화했다. 기존 사용자 설정을 이 문서로 자동 변경하지 않는다.
+사용자의 최근 우선순위에 따라 외부 서버·LLM API·Telegram 추가 개발은 보류하고 플러그인 지능과 검증 기능을 강화했다.
+0.2.2는 기존 설정값·활성 소스를 덮어쓰지 않고 누락된 비밀정보 없는 제품 기본값만 채운다. SQLite 사업 기록은 명시적 `blue-ocean sync --apply` 전까지 일괄 승계하지 않는다.
 
 선정·수상·매출·모든 데이터 접근·완벽한 예측은 구현 목표의 성과 방향일 수 있지만 보장 기능으로 표시하지 않는다.

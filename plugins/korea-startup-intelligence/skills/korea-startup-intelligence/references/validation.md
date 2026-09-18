@@ -19,8 +19,9 @@
 - metric: definition, aggregation(rate/mean), unit, direction(higher/lower), min_sample, pass_threshold, stop_threshold.
 
 rate는 성공 건수 / 관측 대상 수이며 unit은 fraction, 기준은 0~1이다. mean은 총 측정량 / 표본 수이며
-unit은 1인당 분·원 등 평균의 단위다. 현재 자동 채점은 **음수가 아닌 비율·평균**만 지원한다.
-다른 통계량·정성 인터뷰·추적 중인 시계열은 dossier에 분석하고 억지로 비율로 바꾸지 않는다.
+unit은 1인당 분·원 등 평균의 단위다. 현재 수치 자동 판정은 **음수가 아닌 비율·평균**만 지원한다.
+다른 통계량·추적 중인 시계열은 dossier에 분석하고 억지로 비율로 바꾸지 않는다.
+정성 인터뷰·관찰은 아래 `qualitative-plan`으로 사전 코드와 사례 단위를 고정한다.
 높을수록 좋은 지표는 pass > stop, 낮을수록 좋은 지표는 pass < stop이며 사이 값은 inconclusive다.
 최소 표본 수는 1~1,000,000이다. 이것은 시스템 입력 범위이지 적절한 연구 표본 수를 보장하지 않는다.
 
@@ -58,3 +59,28 @@ not_run에는 summary에 미실행 이유를 남기며 measurement나 실험 성
 
 이 검증기는 수치·날짜·단위·참조·사전 기준 일관성을 검사한다. 원자료의 진실성, 표본 대표성,
 통계적 유의성, 인과관계, 전 시장 유료 수요를 자동으로 입증하지 않으며 idea를 supported로 자동 승격하지 않는다.
+
+## 정성 사례 검증
+
+정성 자료를 임의 점수나 설문 비율로 바꾸지 않는다.
+
+```text
+validation qualitative-plan --file 계획.json
+validation qualitative-result --file 결과.json
+```
+
+계획의 공통 필드는 수치 계획과 같고 `metric` 대신 `decision_rule`을 사용한다.
+
+- unit_of_analysis: 익명 인터뷰·업무 사건·구매 결정 등 실제 비교 단위.
+- minimum_eligible_cases: 사전 적격 조건을 통과해야 하는 최소 사례 수.
+- pass_patterns / stop_patterns: 고유 code, 설명, 필요한 서로 다른 사례 수. 서로 겹치지 않는다.
+- coding_protocol: 원문 어느 부분을 어떤 코드로 분류할지 정한 규칙.
+- require_negative_case: 반례를 의도적으로 찾았는지 요구할지 여부.
+
+결과의 `cases`는 비식별 case_id, eligible, negative_case, 사전 `observed_codes`, 사례별 evidence_links를 가진다.
+한 원문을 여러 고객 사례로 중복 계산하지 않는다. 근거는 실제 수집 기간 안의 user_owned 또는 authorized_export이며
+direct_customer/observed_behavior만 허용한다. 중단 패턴이 먼저 충족되면 stop_criterion_met, 모든 통과 패턴과
+필요한 반례 탐색이 충족되면 criterion_met, 표본·품질·패턴이 부족하면 inconclusive다.
+이 판정은 사전 의사결정 규칙의 결과이지 대표성·포화·통계적 유의성의 증명이 아니다.
+
+수치·정성 결과 모두 연결된 블루오션 후보의 판단 이력에 남고, 단계 이동 조건이 생겨도 자동으로 구축·출시하지 않는다.

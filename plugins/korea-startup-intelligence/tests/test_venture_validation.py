@@ -62,6 +62,38 @@ class VentureValidationTest(unittest.TestCase):
                 "evidence_links": [{"evidence_id": eid, "basis": "aggregate_measurement", "locator": "Fixture aggregate",
                                     "note": "Not real customer data"}]}
 
+    def qualitative_plan_input(self, key="fixture-qualitative"):
+        start = parse_date(stamp()) + timedelta(minutes=5)
+        return {"key": key, "dossier_id": self.dossier_id, "hypothesis": "반복 수작업이 전환 이유인지 확인",
+                "method": "사전 질문 순서로 최근 실제 사례를 회고", "population": "가상 적격 사례",
+                "recruitment": "테스트 픽스처; 실제 모집 없음", "collection_plan": "사례별 익명 기록",
+                "safety_stop": "개인정보가 나오면 기록 중단", "starts_at": stamp(start),
+                "ends_at": stamp(start + timedelta(days=1)), "budget_krw": 0, "evidence_ids": self.eids,
+                "decision_rule": {"unit_of_analysis": "익명 사례", "minimum_eligible_cases": 2,
+                    "pass_patterns": [{"code": "repeated-workaround", "description": "반복 수작업 사례",
+                                       "minimum_cases": 2}],
+                    "stop_patterns": [{"code": "no-problem", "description": "문제 경험 없음",
+                                       "minimum_cases": 2}],
+                    "coding_protocol": "사전 코드만 사용하고 애매하면 코드 없음으로 기록",
+                    "require_negative_case": True}}
+
+    def qualitative_result_input(self, plan):
+        rows = []
+        middle = parse_date(plan["record"]["starts_at"]) + timedelta(hours=1)
+        for index in range(3):
+            eid = radar.review_source(self.store, {"topic": "Fixture qualitative", "title": "익명 사례 " + str(index),
+                "url": "https://example.com/fixture-qualitative/" + str(index), "event_at": stamp(middle),
+                "read_scope": "relevant_sections", "family": "customer", "summary": "합성 정성 사례",
+                "origin_group": "fixture-case-" + str(index), "origin_note": "테스트 전용",
+                "reviewer": "unit-test", "collection_basis": "user_owned", "limitations": ["Synthetic fixture"]})["evidence_id"]
+            rows.append({"case_id": "case-" + str(index), "eligible": True, "negative_case": index == 2,
+                         "observed_codes": ["repeated-workaround"] if index < 2 else [],
+                         "evidence_links": [{"evidence_id": eid, "basis": "direct_customer",
+                                             "locator": "합성 사례", "note": "테스트 전용 관측"}]})
+        return {"plan_id": plan["id"], "execution_status": "completed", "summary": "합성 정성 결과",
+                "counterevidence": "한 건은 반복 문제를 확인하지 못함", "limitations": ["Synthetic test"],
+                "cost_krw": 0, "data_quality_issues": [], "cases": rows}
+
     def test_review_draft_does_not_persist(self):
         draft = venture.prepare(self.store, self.dossier_id)
         self.assertIn("draft", draft["status"])
@@ -199,6 +231,26 @@ class VentureValidationTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             validation.plan(self.store, payload)
         self.assertEqual(self.store.records("validation_result"), [])
+
+    def test_qualitative_plan_and_result_preserve_cases_and_negative_evidence(self):
+        plan = validation.qualitative_plan(self.store, self.qualitative_plan_input())
+        self.assertEqual(plan["record"]["method_type"], "qualitative")
+        with self.at(parse_date(plan["record"]["ends_at"]) + timedelta(seconds=1)):
+            payload = self.qualitative_result_input(plan)
+            saved = validation.qualitative_result(self.store, payload)
+            self.assertEqual(saved["record"]["outcome"], "criterion_met")
+            self.assertEqual(saved["record"]["measurement"]["eligible_cases"], 3)
+            self.assertTrue(any(case["negative_case"] for case in saved["record"]["cases"]))
+            self.assertEqual(validation.qualitative_result(self.store, payload)["status"], "unchanged")
+        self.assertEqual(validation.status(self.store)["experiments"][0]["method_type"], "qualitative")
+
+    def test_qualitative_result_cannot_reuse_one_record_as_two_cases(self):
+        plan = validation.qualitative_plan(self.store, self.qualitative_plan_input("fixture-qual-duplicate"))
+        with self.at(parse_date(plan["record"]["ends_at"]) + timedelta(seconds=1)):
+            payload = self.qualitative_result_input(plan)
+            payload["cases"][1]["evidence_links"] = copy.deepcopy(payload["cases"][0]["evidence_links"])
+            with self.assertRaises(ValueError):
+                validation.qualitative_result(self.store, payload)
 
     def test_plan_cannot_be_registered_after_start(self):
         payload = self.plan_input()

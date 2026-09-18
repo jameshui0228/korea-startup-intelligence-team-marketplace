@@ -10,14 +10,19 @@
 
 1. `blue-ocean prepare`: 기존 후보의 마감 작업과 덜 조사한 시장을 함께 불러온다.
 2. 실제 공개 원문과 허용 자료를 읽고 관측을 저장한다.
-3. `blue-ocean save`: 시장공백 후보, 신호 상태, 반대 근거, 다음 행동을 저장한다.
-4. `blue-ocean status|next|brief`: 포트폴리오와 지금 할 일을 간결하게 보여 준다.
-5. 실제 근거가 바뀌면 후보를 수정하고 `blue-ocean transition`으로 생명주기를 이동한다.
+3. radar에서 저장한 가설은 같은 opportunity_key로 블루오션 포트폴리오에 자동 승계된다.
+   기존 카드의 승계는 `blue-ocean sync`로 미리 보고 `blue-ocean sync --apply`로 적용한다.
+4. `blue-ocean save`: 독립 후보의 시장공백, 신호 상태, 반대 근거, 다음 행동을 저장한다.
+5. `blue-ocean status|next|brief`: 포트폴리오와 지금 할 일, 이전 브리핑 이후 바뀐 판단만 간결하게 보여 준다.
+6. dossier·실험 결과가 바뀌면 후보의 동적 평가와 이력에 연결한다. 단계 이동은 제안하되 자동 실행하지 않는다.
+7. 실제 근거가 바뀌면 후보를 수정하고 `blue-ocean transition`으로 생명주기를 이동한다.
 
 ## 블루오션의 판정
 
 경쟁사 검색 결과가 없다는 사실은 블루오션 근거가 아니다. 수요가 없는 빈 시장일 수도 있다.
 후보마다 다음 여덟 항목을 FACT / INFERENCE / ASSUMPTION / UNKNOWN으로 분리한다.
+FACT/INFERENCE는 evidence_id뿐 아니라 supports/contradicts/context, 근거 성격, 원문 위치, 해석을 연결한다.
+판매자 설명과 제목 메타데이터를 실제 고객 행동·지출 근거로 승격하지 않는다.
 
 - problem: 실제로 반복되는 문제와 피해
 - current_spend: 현재 투입하는 돈·시간·인력
@@ -59,7 +64,7 @@ detected → watching → researching → validating → building → launched �
 
 - validating: 핵심 시장공백 근거, 독립 출처, 현재 대안, 근거 연결 dossier가 필요하다.
 - building: 사전 기준을 통과한 실제 validation 결과가 필요하다.
-- launched/scaling: 실제 관측 결과 근거를 연결한다.
+- launched: 검토한 사용자 소유/허용 실행 결과가 필요하다. scaling에는 거래 또는 집계 성과 관측이 추가로 필요하다.
 - parked/killed: 실패가 아니라 자본과 시간을 보호하는 의사결정이다.
 - killed 재개: reopen_condition에 해당하는 새 근거가 있어야 한다.
 
@@ -76,6 +81,9 @@ detected → watching → researching → validating → building → launched �
 4. 핵심 반대 근거와 아직 모르는 점
 5. 지금 할 행동 하나와 통과/중단 기준
 6. 보류·폐기하거나 다시 열 후보
+
+브리핑은 직전 확정 브리핑의 후보 스냅샷과 비교한다. 새 후보·판단/근거/행동 변경·삭제를 구분하고,
+변화가 없으면 그대로라고 표시한다. 이름이 비슷한 후보는 토큰 유사도를 중복 검토 경고로만 쓰며 자동 병합하지 않는다.
 
 신호가 약하면 아이디어 수를 억지로 채우지 않는다. 다만 탐색 가설과 조사 완료 후보를 구분해 사용자가 다음 선택을 할 수 있게 한다.
 

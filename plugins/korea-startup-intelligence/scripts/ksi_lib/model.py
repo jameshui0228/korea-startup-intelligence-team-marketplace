@@ -140,7 +140,8 @@ def normalize_title(value):
     return re.sub(r"[^\w가-힣]", "", unicodedata.normalize("NFKC", value).lower())
 
 
-DEFAULT_CONFIG = {"schema_version": 1, "timezone": "Asia/Seoul", "freshness_hours": 6,
+DEFAULT_CONFIG = {"schema_version": 1, "workspace_profile_version": 2,
+                  "timezone": "Asia/Seoul", "freshness_hours": 6,
                   "sector_batch": 8, "max_requests": 30, "timeout_seconds": 12,
                   "enabled_sources": ["github_new", "hackernews", "google_trends_rss", "google_news_rss"],
                   "watch_topics": [], "countries": ["KR"], "auto_update_code": False,
@@ -150,14 +151,34 @@ DEFAULT_CONFIG = {"schema_version": 1, "timezone": "Asia/Seoul", "freshness_hour
                   "retention_days": 28}
 
 
+def migrate_config(path, config):
+    """Add safe product defaults without overwriting user configuration.
+
+    The SQLite schema and the human-facing product profile evolve separately.
+    Older workspaces therefore keep schema_version=1 while receiving newly
+    introduced, non-secret defaults.  Existing lists and user choices always
+    win; migrations never enable a source or external action.
+    """
+    if not isinstance(config, dict) or config.get("schema_version") != 1:
+        raise ValueError("Unsupported workspace schema")
+    migrated = dict(config)
+    for key, value in DEFAULT_CONFIG.items():
+        if key not in migrated:
+            # JSON round-trip provides an independent copy for mutable defaults.
+            migrated[key] = json.loads(json.dumps(value, ensure_ascii=False))
+    migrated["workspace_profile_version"] = DEFAULT_CONFIG["workspace_profile_version"]
+    if migrated != config:
+        atomic_json(path, migrated)
+    return migrated
+
+
 class Store:
     def __init__(self, workspace):
         self.workspace = Path(workspace).expanduser().resolve()
-        if not (self.workspace / "config.json").exists():
+        config_path = self.workspace / "config.json"
+        if not config_path.exists():
             raise ValueError("Workspace not initialized; run init first")
-        self.config = json.loads((self.workspace / "config.json").read_text())
-        if self.config.get("schema_version") != 1:
-            raise ValueError("Unsupported workspace schema")
+        self.config = migrate_config(config_path, json.loads(config_path.read_text()))
         self.db = sqlite3.connect(self.workspace / "intelligence.sqlite3", timeout=10)
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA foreign_keys=ON")

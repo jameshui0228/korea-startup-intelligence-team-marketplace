@@ -152,8 +152,10 @@ class RadarTest(unittest.TestCase):
     def test_good_card_saved_as_hypothesis_not_supported(self):
         result = radar.publish_card(self.store, self.card())
         self.assertTrue(result["notification_eligible"])
+        self.assertEqual(result["blue_ocean"]["status"], "synced")
         self.assertEqual(self.store.records("idea")[0]["status"], "hypothesis")
         self.assertIsNone(self.store.records("opportunity")[0]["trend_score"])
+        self.assertEqual(self.store.records("blue_ocean")[0]["managed_by"], "radar_bridge")
 
     def test_missing_payer_rejected(self):
         card = self.card()

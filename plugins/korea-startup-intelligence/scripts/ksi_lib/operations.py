@@ -75,18 +75,25 @@ def finish(store, packet_id, send=False):
     if missing:
         return {"status": "review_incomplete", "packet_id": packet_id, "topics_to_review": missing, "sent": 0}
     radar.render_cards(store)
+    from . import blue_ocean
+    portfolio_sync = blue_ocean.sync(store, apply=True)
+    portfolio_brief = blue_ocean.brief(store, commit=send)
     queued = telegram.enqueue(store)
     preview = telegram.deliver(store)
     # A normal invocation without --send is a side-effect-free network preview;
     # it does not finalize the cycle or consume its later send opportunity.
     if not send:
-        return {"status": "ready_to_finish", "packet_id": packet_id, "queue": queued, "preview": preview, "network_calls": 0}
+        return {"status": "ready_to_finish", "packet_id": packet_id, "queue": queued, "preview": preview,
+                "blue_ocean_sync": portfolio_sync, "blue_ocean_changes": portfolio_brief["changes_since_previous_brief"],
+                "network_calls": 0}
     delivery = telegram.deliver(store, send=True, cycle_id=packet_id)
     maintenance = research.maintenance(store)
     result = {"status": "completed", "packet_id": packet_id, "trigger": run["trigger"],
               "automation_id": run["automation_id"], "completed_at": stamp(),
               "topics_reviewed": len(submissions), "cards_saved": sum(len(s["cards"]) for s in submissions.values()),
               "queue": queued, "delivery": delivery, "reports_generated": len(maintenance["generated"]),
+              "blue_ocean_sync": portfolio_sync,
+              "blue_ocean_changes": portfolio_brief["changes_since_previous_brief"],
               "boundary": "Research decisions and send receipts; neither scheduler proof nor validated market demand"}
     with store.db:
         store.db.execute("UPDATE radar_runs SET completed_at=?,state='completed',result=? WHERE packet_id=?",

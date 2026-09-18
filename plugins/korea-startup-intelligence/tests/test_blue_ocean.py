@@ -1,4 +1,5 @@
 import json
+import fcntl
 import subprocess
 import sys
 import tempfile
@@ -74,7 +75,10 @@ class BlueOceanTest(unittest.TestCase):
     def test_metadata_only_claims_do_not_become_evidence_backed(self):
         payload = self.payload()
         payload["assessments"] = {key: {"status": "FACT", "conclusion": "본문 검토 전 주장",
-                                                 "evidence_ids": [self.row["id"]]}
+                                                 "evidence_ids": [self.row["id"]],
+                                                 "links": [{"evidence_id": self.row["id"], "relation": "supports",
+                                                            "basis": "analyst_inference", "locator": "검색 결과 제목",
+                                                            "note": "본문을 읽지 않은 메타데이터"}]}
                                   for key in ("problem", "current_spend", "supply_gap")}
         result = blue_ocean.save(self.store, payload)
         self.assertEqual(result["assessment"]["evidence_backed_assessments"], [])
@@ -106,7 +110,9 @@ class BlueOceanTest(unittest.TestCase):
             "review_after": stamp(now() + timedelta(days=14)),
         })
         self.assertEqual(result["event"]["to_stage"], "watching")
-        self.assertEqual(len(self.store.records("blue_ocean_event")), 1)
+        self.assertEqual(len(self.store.records("blue_ocean_event")), 2)
+        self.assertTrue(any(e.get("event_type") == "stage_transition"
+                            for e in self.store.records("blue_ocean_event")))
         self.assertEqual(self.store.records("blue_ocean")[0]["stage"], "watching")
 
     def test_next_and_brief_are_personal_portfolio_views(self):
@@ -134,6 +140,57 @@ class BlueOceanTest(unittest.TestCase):
         payload["stage"] = "building"
         with self.assertRaises(ValueError):
             blue_ocean.save(self.store, payload)
+
+    def opportunity(self):
+        return {
+            "id": "idea-care-handoff", "opportunity_key": "care-handoff-radar",
+            "title": "돌봄 인계 공백", "domain_ids": ["KR-180"],
+            "target": "소규모 돌봄기관 관리자", "problem": "교대 인계 누락 가능성",
+            "payer": "기관 운영자", "current_alternative": "종이와 메신저",
+            "why_now": "기록 요구 변화", "korea_gap": "한국 대안 검토 전",
+            "mvp": "수동 확인표", "solution": "인계 확인",
+            "business_models": ["기관 구독"], "monetization": "기관 구독",
+            "evidence_ids": [self.row["id"]], "dossier_id": None,
+            "next_experiment": {"hypothesis": "반복 누락 비용이 있다", "method": "공개 업무 흐름 조사",
+                                "pass_condition": "반복 사례 2건", "stop_condition": "사례 없음",
+                                "timebox_days": 7, "budget_krw": 0},
+        }
+
+    def test_sync_previews_then_adopts_existing_opportunity(self):
+        with self.store.db:
+            self.store.record("opportunity", self.opportunity())
+        preview = blue_ocean.sync(self.store)
+        self.assertEqual(preview["items"][0]["action"], "adopt")
+        self.assertEqual(self.store.records("blue_ocean"), [])
+        applied = blue_ocean.sync(self.store, apply=True)
+        self.assertEqual(applied["results"][0]["status"], "synced")
+        candidate = self.store.records("blue_ocean")[0]
+        self.assertEqual(candidate["source_opportunity_id"], "idea-care-handoff")
+        self.assertEqual(candidate["managed_by"], "radar_bridge")
+        self.assertEqual(candidate["evidence_ids"], [self.row["id"]])
+
+    def test_brief_reports_only_real_snapshot_changes(self):
+        blue_ocean.save(self.store, self.payload())
+        first = blue_ocean.brief(self.store)
+        self.assertEqual(len(first["changes_since_previous_brief"]["added"]), 1)
+        second = blue_ocean.brief(self.store)
+        self.assertEqual(second["changes_since_previous_brief"]["unchanged_count"], 1)
+        self.assertEqual(second["changes_since_previous_brief"]["changed"], [])
+
+    def test_fact_claim_requires_typed_source_link(self):
+        payload = self.payload()
+        payload["assessments"] = {"problem": {"status": "FACT", "conclusion": "문제 있음",
+                                                          "evidence_ids": [self.row["id"]]}}
+        with self.assertRaises(ValueError):
+            blue_ocean.save(self.store, payload)
+
+    def test_read_only_status_does_not_wait_for_writer_run_lock(self):
+        cli = ROOT / "scripts" / "ksi.py"
+        with (self.workspace / ".run.lock").open("a") as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            result = subprocess.run([sys.executable, str(cli), "--workspace", str(self.workspace),
+                                     "blue-ocean", "status"], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":

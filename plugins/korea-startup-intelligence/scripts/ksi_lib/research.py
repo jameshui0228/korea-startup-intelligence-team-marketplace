@@ -189,7 +189,19 @@ def save_dossier(store, payload):
             "severity": data["findings"]["problem_severity"], "current_solution": data["findings"]["current_workaround"],
             "evidence_ids": ids, "dossier_id": data["id"], "status": "research_hypothesis"})
     render_dossier(store, data)
-    return {"status": "saved", "id": data["id"], "revision": revision, **dossier_quality(store, data)}
+    from . import blue_ocean
+    portfolio_sync = []
+    for card in store.records("opportunity"):
+        if card.get("dossier_id") == data["id"]:
+            try:
+                portfolio_sync.append(blue_ocean.sync_opportunity(store, card))
+            except ValueError as exc:
+                portfolio_sync.append({"status": "not_synced", "reason": str(exc), "opportunity_id": card["id"]})
+    with store.db:
+        dependency_events = blue_ocean.note_dependency_change(store, data["id"], "dossier", data["id"])
+    return {"status": "saved", "id": data["id"], "revision": revision,
+            "blue_ocean_sync": portfolio_sync, "blue_ocean_events": dependency_events,
+            **dossier_quality(store, data)}
 
 
 def dossier_quality(store, dossier):

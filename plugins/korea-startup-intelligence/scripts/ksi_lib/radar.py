@@ -451,9 +451,12 @@ def publish_card(store, card):
                          "next_experiment": data["next_experiment"], "status": "hypothesis", "score": None,
                          "opportunity_card_id": data["id"]}
         store.record("idea", validate_record(store, "idea", ordinary_idea))
+        from . import blue_ocean
+        portfolio_sync = blue_ocean.sync_opportunity(store, data)
     render_cards(store)
     return {"status": "saved_hypothesis", "id": data["id"], "revision": revision,
-            "notification_eligible": data["notification_eligible"], "queued": False}
+            "notification_eligible": data["notification_eligible"], "queued": False,
+            "blue_ocean": portfolio_sync}
 
 
 def submit(store, payload):

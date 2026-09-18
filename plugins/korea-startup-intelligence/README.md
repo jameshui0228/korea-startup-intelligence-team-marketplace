@@ -1,4 +1,4 @@
-# 허구김 · v0.2.1
+# 허구김 · v0.2.2
 
 한국의 약한 시장 신호에서 아직 충분히 해결되지 않은 고객 문제와 공급 공백을 찾고,
 아이디어를 검증·실행·보류·폐기까지 관리하는 개인용 Codex 창업 에이전트 **허구김**.
@@ -13,7 +13,8 @@ API는 수집 범위/빈도를 확장하는 선택 사항이며 사업 성공이
 - blue-ocean 운영체제: 시장공백 8항목, 신호 6항목, 후보별 다음 행동·중단/재개 조건·상태 전이·판단 이력.
 - detected → watching → researching → validating → building → launched → scaling 생명주기와 parked/killed 관리.
 - 경쟁사 검색 결과 0건을 블루오션으로 오인하지 않는 근거 게이트. UNKNOWN을 0점이나 임의 성공확률로 바꾸지 않음.
-- 오늘의 후보·판단 변경·마감 행동을 보여 주는 개인 창업 포트폴리오 브리핑.
+- 레이더 가설→블루오션 후보→dossier→수치/정성 검증 결과를 연결하고, 직전 브리핑 이후 달라진 판단만 보여 주는 개인 창업 포트폴리오.
+- 기존 0.2.1 워크스페이스의 사용자 설정을 보존하면서 새 제품 기본값을 채우는 안전한 설정 마이그레이션.
 - 사용자 원본 **400개 분야·3,559개 세부항목·89개 압축 분류**와 2개 마스터 요청의 원문/해시 보존.
 - 기존 GitHub 조사 **177개 저장소 메타데이터 색인**과 실제 설계에 반영한 출처.
 - 신규 GitHub·Hacker News·Google Trending RSS·Google News RSS 읽기 전용 수집.
@@ -32,7 +33,7 @@ API는 수집 범위/빈도를 확장하는 선택 사항이며 사업 성공이
 - market-map: 400분야의 저장 신호·원문 검토·조사·실험 공백을 구분하는 지도. 메타데이터만으로 트렌드 단계를 만들지 않음.
 - research-work start/complete/history: 실제 조사·근거 미발견·접근 장애를 구분하고 새 근거/재검토 시점에 후속 조사로 복귀.
 - gstack 적용 venture-review: 단계별 고객 질문, 현상 유지 포함 대안, 실패 경로, 유효한 답 재사용과 오래된 답 재검토.
-- validation: 사전 기준과 실제 결과를 분리해 성공·실패·불충분·미실행을 보존. 고객 결과를 자동으로 만들어내지 않음.
+- validation: 사전 기준과 실제 결과를 분리해 성공·실패·불충분·미실행을 보존. 수치 실험과 사전 코드형 정성 사례를 구분하며 고객 결과를 자동으로 만들어내지 않음.
 - application: 근거가 연결된 본문·공식 평가항목·예산 합계·일정·발표·심사 Q&A·제출 전 점검을 JSON/Markdown으로 작성/검사.
 - application resume/check/attest: 기존 초안을 보존하며 수정, 우선순위별 보완 과제, 발표/Q&A 출처 색인, 문서 버전에 연결된 재검토. 내용·공고·원문 해석 변경 시 이전 검토 표시 재사용 차단.
 
@@ -47,6 +48,8 @@ API는 수집 범위/빈도를 확장하는 선택 사항이며 사업 성공이
 ```bash
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path init
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean prepare --limit 6
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean sync
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean sync --apply
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean status
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean next
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean brief
@@ -103,6 +106,7 @@ HWP/HWPX 생성·렌더링, 신청서 자동 제출, 고객 연락, SNS 게시, 
 
 예약 작업은 `radar prepare --trigger heartbeat --automation-id ID --resume`로 중단된 조사를 재개하고,
 모든 주제 검토를 제출한 뒤 `radar finish --packet-id ID --send`로 선별·전송·보고서·완료 기록을 마친다.
+finish는 같은 근거 성격을 유지한 채 새 레이더 가설을 블루오션 포트폴리오로 승계하고 판단 변화 브리핑도 갱신한다.
 수동 실행에서는 heartbeat 표기를 생략한다. `radar health`, `radar runs`, `telegram history`에서 실제 이력을 확인한다.
 전송 도중 중단된 건은 자동 재전송하지 않는다. 사용자가 수신함을 확인한 뒤 `telegram resolve`로 기록하고,
 명시적으로 재전송까지 요청한 경우에만 `--retry`를 사용한다. API 성공과 사용자 확인은 다른 집계다.
@@ -137,6 +141,8 @@ python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path re
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path research-work complete --file /absolute/actual-research-receipt.json
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path research-work history
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path venture-review prepare --dossier-id dossier-ID --stage pre_product
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path validation qualitative-plan --file /absolute/qualitative-plan.json
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path validation qualitative-result --file /absolute/qualitative-result.json
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path application prepare --dossier-id dossier-ID
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path application save --file /absolute/written-application.json
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path application check application-ID
