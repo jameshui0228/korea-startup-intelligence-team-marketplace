@@ -1,0 +1,20 @@
+{
+  "korea_domains.txt": {
+    "sha256": "1c4b172ae738c7712d3a57509fd1d236d4deb298ae5df59b8ce889c0c9584133",
+    "bytes": 57147,
+    "origin": "user supplied attachment",
+    "copied_verbatim": true
+  },
+  "master_mission.txt": {
+    "sha256": "35d28b651d360d058d1397b93d2f0c440b9a0719eebe558d1f92ef337fed8262",
+    "bytes": 26666,
+    "origin": "user supplied attachment",
+    "copied_verbatim": true
+  },
+  "trend_mission.txt": {
+    "sha256": "137b77007ae399aba7c3329dcb0877fc72f570b0242b8aeaa37165484886b426",
+    "bytes": 17966,
+    "origin": "user supplied follow-up request",
+    "copied_verbatim": true
+  }
+}

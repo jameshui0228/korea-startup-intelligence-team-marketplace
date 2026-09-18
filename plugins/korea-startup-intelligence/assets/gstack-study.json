@@ -1,0 +1,65 @@
+{
+  "repository": "https://github.com/garrytan/gstack",
+  "commit": "a6b3a57512ca6d5c6aa5b68f74f736195021f96e",
+  "reviewed_on": "2026-09-17",
+  "license": "MIT",
+  "code_executed": false,
+  "global_installation_or_hooks": false,
+  "model_weight_training": false,
+  "read_scope": [
+    {"path": "README.md", "scope": "selected architecture, workflow and privacy sections"},
+    {"path": "ETHOS.md", "scope": "principles of searching, completeness and user control"},
+    {"path": "openclaw/skills/gstack-openclaw-office-hours/SKILL.md", "scope": "complete instruction document"},
+    {"path": "openclaw/skills/gstack-openclaw-ceo-review/SKILL.md", "scope": "scope modes, premise challenge, alternatives and review sections"},
+    {"path": "office-hours/SKILL.md.tmpl", "scope": "lines 64-279: context, landscape synthesis, premise challenge and alternatives"},
+    {"path": "office-hours/sections/phase-2a-startup-diagnostic.md", "scope": "six questions, product-stage routing and specificity principles; full document reviewed"},
+    {"path": "office-hours/sections/design-and-handoff.md", "scope": "selected design lineage, decision document, distribution and assignment sections; lines 167-223 review dimensions and convergence boundary"},
+    {"path": "plan-ceo-review/SKILL.md.tmpl", "scope": "lines 207-358 and 411-437: landscape, premise, alternatives, scope choices and temporal questions"},
+    {"path": "plan-eng-review/SKILL.md.tmpl", "scope": "engineering failure paths and test planning"},
+    {"path": "plan-design-review/SKILL.md.tmpl", "scope": "lines 75-198: user journey, hierarchy, empty/error states, trust and UI scope boundary"},
+    {"path": "review/SKILL.md.tmpl", "scope": "verification-of-claims section"},
+    {"path": "qa/SKILL.md.tmpl", "scope": "test/fix/reverify and regression workflow sections"},
+    {"path": "spec/SKILL.md.tmpl", "scope": "lines 221-335: verified current state, quantified impact, acceptance criteria, testing and rollback"},
+    {"path": "retro/SKILL.md.tmpl", "scope": "lines 298-360, 441-452 and 737-760: dated history, comparable windows, learning capture and reporting boundaries"},
+    {"path": "learn/SKILL.md.tmpl", "scope": "lines 70-160: stale/contradictory learning review, export and statistics; no scripts executed"},
+    {"path": "ARCHITECTURE.md", "scope": "error handling, crash recovery and evaluation persistence sections"},
+    {"path": "LICENSE", "scope": "MIT license"}
+  ],
+  "adaptations": [
+    "Six evidence-linked founder questions with UNKNOWN preserved",
+    "Explicit alternatives, failure conditions and smallest real experiment",
+    "Founder-review CLI linked to dossiers, explicit counterarguments and stale-review checks",
+    "Prespecified experiment criteria separated from observed results and regression-tested failure paths",
+    "Stage-aware diagnostic questions; reuse current answers without inventing customer results or silently reviving rejected proposals",
+    "No-key broad-market research and application workbenches with traceable evidence, numeric checks and observed-work receipts"
+  ],
+  "implementation_map": [
+    {
+      "principle": "Customer specificity, status quo, stage-aware questions and smallest value",
+      "kind": "implemented",
+      "paths": ["scripts/ksi_lib/venture.py", "tests/test_venture_validation.py"]
+    },
+    {
+      "principle": "Prespecified acceptance criteria, observed results and failure cases",
+      "kind": "implemented",
+      "paths": ["scripts/ksi_lib/validation.py", "tests/test_venture_validation.py"]
+    },
+    {
+      "principle": "Evidence-to-deliverable traceability and structural review",
+      "kind": "implemented_with_agent_judgment",
+      "paths": ["scripts/ksi_lib/application.py", "tests/test_application_market.py"]
+    },
+    {
+      "principle": "Recorded investigations, failed searches, blockers and evidence-based revisits",
+      "kind": "implemented",
+      "paths": ["scripts/ksi_lib/agenda.py", "tests/test_research_agenda.py"]
+    },
+    {
+      "principle": "Landscape synthesis, user journey, scope and distribution critique for Korean sectors",
+      "kind": "agent_procedure_not_an_independent_validator",
+      "paths": ["skills/korea-startup-intelligence/references/gstack-operating-model.md", "skills/korea-startup-intelligence/references/full-spectrum.md"]
+    }
+  ],
+  "not_adopted": ["third-party installation or auto-upgrade", "browser cookie import", "telemetry", "external LLM CLI dependency", "automatic subagent delegation", "YC endorsement or claimed productivity multipliers", "forced certainty or confrontational diagnosis"],
+  "limits": "Methodology studied and independently rephrased. No claim of full repository verification, YC endorsement, guaranteed productivity or business outcomes."
+}

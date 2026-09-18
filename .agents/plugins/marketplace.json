@@ -1,0 +1,20 @@
+{
+  "name": "korea-startup-team",
+  "interface": {
+    "displayName": "Korea Startup Intelligence Team"
+  },
+  "plugins": [
+    {
+      "name": "korea-startup-intelligence",
+      "source": {
+        "source": "local",
+        "path": "./plugins/korea-startup-intelligence"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
