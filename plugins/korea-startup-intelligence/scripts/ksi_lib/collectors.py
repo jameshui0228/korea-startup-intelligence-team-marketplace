@@ -32,7 +32,7 @@ def fetch(url, headers=None, payload=None, timeout=12):
     parts = urllib.parse.urlsplit(url)
     if parts.scheme != "https" or parts.hostname not in ALLOWED_HOSTS or parts.username or parts.port:
         raise FetchError("unsupported_endpoint")
-    headers = {"User-Agent": "KoreaStartupIntelligence/0.6.0 (personal research; metadata only)",
+    headers = {"User-Agent": "KoreaStartupIntelligence/0.6.1 (personal research; metadata only)",
                "Accept": "application/json, application/rss+xml, application/xml", **(headers or {})}
     body = json.dumps(payload).encode() if payload is not None else None
     if body is not None:

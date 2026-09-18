@@ -1,8 +1,8 @@
 # 구축·검증 상태 · 2026-09-18
 
-이 파일은 이번 구축 시점의 검증 범위다. v0.6.0의 기본은 API 키와 예약이 필요 없는 수동 `on_demand` 모드이며 현재 상태는 CLI `doctor`를 우선한다.
+이 파일은 이번 구축 시점의 검증 범위다. v0.6.1의 기본은 API 키와 예약이 필요 없는 수동 `on_demand` 모드이며 현재 상태는 CLI `doctor`를 우선한다.
 
-v0.6.0에서는 `signal web-plan`으로 12개 공개 웹 계열을 API 키 없이 계획하고, `signal batch-import`로 실제 읽은 원문 1~50개를 원자적으로 접수한 뒤 후보를 재평가한다. 기존 dossier 2건은 `unproven`을 유지한다. source capabilities는 connector와 공개 웹 fallback을 구분한다. 76개 항목의 구현·부분·무키 구현/실측 대기는 [ACCEPTANCE_76.md](ACCEPTANCE_76.md)를 따른다. 공개 웹 표본을 직접 플랫폼 실시간 연결이나 전수조사라고 주장하지 않는다.
+v0.6.1에서는 `signal web-plan`으로 12개 공개 웹 계열을 API 키 없이 계획하고, `signal batch-import`로 실제 읽은 원문 1~50개를 원자적으로 접수한 뒤 후보를 재평가한다. 새 heartbeat 실행은 차단한다. 기존 dossier 2건은 `unproven`을 유지한다. source capabilities는 connector와 공개 웹 fallback을 구분한다. 76개 항목의 구현·부분·무키 구현/실측 대기는 [ACCEPTANCE_76.md](ACCEPTANCE_76.md)를 따른다. 공개 웹 표본을 직접 플랫폼 실시간 연결이나 전수조사라고 주장하지 않는다.
 
 ## 이번 강화에서 실행한 것
 

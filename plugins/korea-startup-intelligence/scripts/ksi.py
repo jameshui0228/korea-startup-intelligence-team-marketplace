@@ -626,7 +626,7 @@ def main():
         actions.add_parser(name)
     r = actions.add_parser("prepare")
     r.add_argument("--no-refresh", action="store_true", help="Use stored evidence without network calls")
-    r.add_argument("--trigger", choices=("manual",), default="manual", help="v0.6.0 on-demand mode permits manual runs only")
+    r.add_argument("--trigger", choices=("manual",), default="manual", help="v0.6.1 on-demand mode permits manual runs only")
     r.add_argument("--automation-id", help=argparse.SUPPRESS)
     r.add_argument("--resume", action="store_true", help="Resume a recent unfinished cycle of the same trigger")
     r = actions.add_parser("finish")
