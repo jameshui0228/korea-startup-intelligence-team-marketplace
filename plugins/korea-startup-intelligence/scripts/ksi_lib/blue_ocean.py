@@ -230,10 +230,13 @@ def assess(store, candidate):
     current = {o["id"] for o in store.observations()}
     stale_ids = sorted(ids - current)
     diversity = _source_diversity(store, sorted(ids & current))
+    substantive = set(diversity["substantive_evidence_ids"])
     backed = [k for k, item in candidate.get("assessments", {}).items()
-              if item.get("status") in ("FACT", "INFERENCE") and item.get("evidence_ids") and not set(item["evidence_ids"]) - current]
+              if item.get("status") in ("FACT", "INFERENCE") and set(item.get("evidence_ids", [])) & substantive
+              and not set(item["evidence_ids"]) - current]
     signal_backed = [k for k, item in candidate.get("signal_profile", {}).items()
-                     if item.get("status") in ("FACT", "INFERENCE") and item.get("evidence_ids") and not set(item["evidence_ids"]) - current]
+                     if item.get("status") in ("FACT", "INFERENCE") and set(item.get("evidence_ids", [])) & substantive
+                     and not set(item["evidence_ids"]) - current]
     core = {"problem", "current_spend", "supply_gap", "timing", "korea_fit", "reachability", "switching_reason"}
     missing_core = sorted(core - set(backed))
     reasons = ["missing_evidence:" + key for key in missing_core]
@@ -365,8 +368,13 @@ def prepare(store, limit=6):
         raise ValueError("limit: 1~12 범위가 필요합니다.")
     from .research import research_plan
     plan = research_plan(store, limit)
+    managed_keys = {c["key"] for c in store.records("blue_ocean")}
+    unmanaged = [{"id": c["id"], "opportunity_key": c.get("opportunity_key"), "title": c.get("title"),
+                  "dossier_id": c.get("dossier_id"), "next_action": "새 근거를 재검토한 뒤 blue-ocean 후보로 채택하거나 제외"}
+                 for c in store.records("opportunity") if c.get("opportunity_key") not in managed_keys]
     return {"mode": "blue_ocean_discovery", "api_key_required": False,
-            "existing_portfolio": status(store), "research_tasks": plan.get("tasks", []),
+            "existing_portfolio": status(store), "unmanaged_opportunities": unmanaged[:12],
+            "research_tasks": plan.get("tasks", []),
             "search_lanes": [
                 "고객 행동·반복 수작업·현재 지출", "검색·커뮤니티·리뷰의 약한 신호",
                 "채용·조달·특허·규제·기술 가격 변화", "해외 선행 사례와 한국 대체재",

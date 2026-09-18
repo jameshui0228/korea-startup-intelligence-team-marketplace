@@ -71,6 +71,15 @@ class BlueOceanTest(unittest.TestCase):
         self.assertFalse(result["assessment"]["blue_ocean_proven"])
         self.assertIn("current_workaround_not_compared", result["assessment"]["blocking_gaps"])
 
+    def test_metadata_only_claims_do_not_become_evidence_backed(self):
+        payload = self.payload()
+        payload["assessments"] = {key: {"status": "FACT", "conclusion": "본문 검토 전 주장",
+                                                 "evidence_ids": [self.row["id"]]}
+                                  for key in ("problem", "current_spend", "supply_gap")}
+        result = blue_ocean.save(self.store, payload)
+        self.assertEqual(result["assessment"]["evidence_backed_assessments"], [])
+        self.assertEqual(result["assessment"]["whitespace_state"], "unproven")
+
     def test_revision_required_and_stage_cannot_bypass_transition(self):
         blue_ocean.save(self.store, self.payload())
         changed = self.payload()
