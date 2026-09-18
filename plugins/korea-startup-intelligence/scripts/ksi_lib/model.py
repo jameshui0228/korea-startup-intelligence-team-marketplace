@@ -141,13 +141,15 @@ def normalize_title(value):
     return re.sub(r"[^\w가-힣]", "", unicodedata.normalize("NFKC", value).lower())
 
 
-DEFAULT_CONFIG = {"schema_version": 1, "workspace_profile_version": 7,
+DEFAULT_CONFIG = {"schema_version": 1, "workspace_profile_version": 8,
                   "timezone": "Asia/Seoul", "freshness_hours": 6,
                   "sector_batch": 8, "max_requests": 30, "timeout_seconds": 12,
                   "enabled_sources": ["github_new", "hackernews", "crossref_recent",
                                       "google_trends_rss", "google_news_rss"],
                   "watch_topics": [], "countries": ["KR"], "auto_update_code": False,
                   "operating_mode": "on_demand", "scheduler_required": False,
+                  "discovery_mode": "frontier_then_validation",
+                  "frontier_targets": {"raw": 30, "semifinal": 10, "shortlist": 3},
                   "kosis_series": [],
                   "product_focus": "blue_ocean_discovery_and_personal_founder_operations",
                   "signal_intake_lanes": ["jobs", "patents", "standards", "papers", "technology_cost",

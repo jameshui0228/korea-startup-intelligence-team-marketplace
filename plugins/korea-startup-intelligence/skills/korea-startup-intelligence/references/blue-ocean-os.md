@@ -7,8 +7,10 @@
 공모전, 지원사업, 협업, 텔레그램은 사용자가 요청할 때만 연결하는 선택 모듈이다.
 
 사용자는 내부 CLI나 JSON을 외울 필요가 없다. Codex가 자연어 요청을 다음 흐름으로 변환한다.
+참신함·혁신·선행 트렌드가 핵심인 요청은 보수적 시장공백 판정 전에
+[30→10→3 프런티어 발견](frontier-discovery.md)을 실행한다. 발산 단계의 탐색 가설과 검증 단계의 사업 후보를 같은 상태로 부르지 않는다.
 
-1. `blue-ocean onboard`로 첫 설정/기존 자료를 확인하고 `blue-ocean run --topic "고객 문제"`으로 무키 수집·공개 웹 조사 계획·기존 자료 승계·재평가·브리핑을 준비한다. `--no-refresh`는 저장 자료 재검토에 쓴다.
+1. `blue-ocean onboard`로 첫 설정/기존 자료를 확인하고 `blue-ocean run --topic "고객 문제"`으로 무키 수집·공개 웹 조사 계획·기존 자료 승계·재평가·프런티어 조합·브리핑을 준비한다. `--no-refresh`는 저장 자료 재검토에 쓴다.
 2. Codex가 실제 공개 원문과 허용 자료를 읽고 `signal batch-import`로 관측을 일괄 저장한다. 검색 결과 조각은 저장하지 않는다.
 3. radar에서 저장한 가설은 같은 dossier 또는 opportunity_key로 블루오션 포트폴리오에 자동 승계된다. 기회 카드가 없는 기존 dossier도 승계한다.
    기존 카드의 승계는 `blue-ocean sync`로 미리 보고 `blue-ocean sync --apply`로 적용한다.

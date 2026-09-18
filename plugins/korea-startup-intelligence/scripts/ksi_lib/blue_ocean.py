@@ -907,6 +907,7 @@ def prepare(store, limit=6, no_refresh=False, max_requests=None, sector_batch=No
     from .research import research_plan
     from .engine import refresh
     from .no_api_research import plan as public_web_plan
+    from .frontier import frontier_packet
     collection = None
     if not no_refresh:
         collection = refresh(store, budget=max_requests if max_requests is not None else min(store.config.get("max_requests", 30), 18),
@@ -915,6 +916,7 @@ def prepare(store, limit=6, no_refresh=False, max_requests=None, sector_batch=No
     reassessment = reassess_all(store, apply=True, trigger="blue_ocean_prepare")
     plan = research_plan(store, limit)
     web_plan = public_web_plan(store, topic=topic, limit=12)
+    frontier = frontier_packet(store, topic=topic, limit=max(30, limit * 5))
     adoption = sync(store, apply=False)
     unmanaged = [item for item in adoption["items"] if item["action"] == "adopt"]
     return {"mode": "blue_ocean_discovery", "api_key_required": False,
@@ -924,13 +926,14 @@ def prepare(store, limit=6, no_refresh=False, max_requests=None, sector_batch=No
             "portfolio_sync_applied": adoption_applied, "automatic_reassessment": reassessment,
             "research_tasks": plan.get("tasks", []),
             "public_web_plan": web_plan,
+            "frontier_discovery": frontier,
             "search_lanes": [
                 "고객 행동·반복 수작업·현재 지출", "검색·커뮤니티·리뷰의 약한 신호",
                 "채용·조달·특허·규제·기술 가격 변화", "해외 선행 사례와 한국 대체재",
                 "직접 경쟁·간접 경쟁·현 상태 유지", "광고·봇·계절성·일회성 사건 반증",
             ],
             "decision_order": ["문제", "현재 지출", "공급 공백", "왜 지금", "한국 적합성", "초기 고객 접근", "전환 이유", "반대 근거"],
-            "instruction": "실제 원문을 읽고 근거를 저장한 뒤 후보를 작성하세요. 검색 결과 부재를 시장 공백으로 확정하지 마세요."}
+            "instruction": "실제 원문을 읽은 뒤 frontier_discovery로 최소 30개를 발산하고 10개를 반증한 뒤 3개만 선별하세요. 평범한 AI·통합 플랫폼 재포장은 탈락시키고, 검색 결과 부재를 시장 공백으로 확정하지 마세요."}
 
 
 def brief(store, commit=True):

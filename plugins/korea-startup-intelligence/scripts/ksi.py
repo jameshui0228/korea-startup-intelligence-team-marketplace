@@ -13,7 +13,7 @@ from ksi_lib.model import (REQUIRED, Store, assets, atomic_json, canonical_url, 
 from ksi_lib import (radar, telegram, research, grants, operations, venture, validation,
                      agenda, application, market, workbench, competition, trend_forecast,
                      blue_ocean, founder_ops, venture_intelligence, venture_ops, signal_intake,
-                     prevalidation, no_api_research)
+                     prevalidation, no_api_research, frontier)
 
 
 def edit_payload(store, path, kind, prefix):
@@ -62,12 +62,15 @@ def doctor(store):
     return {"workspace": str(store.workspace), "sqlite_integrity": store.db.execute("PRAGMA integrity_check").fetchone()[0],
             "workspace_profile_version": store.config.get("workspace_profile_version"),
             "operating_mode": radar_cfg["operating_mode"],
+            "discovery_mode": store.config.get("discovery_mode"),
             "api_credentials_required_for_core": False,
             "sources": sources, "coverage": {k: v for k, v in coverage(store).items() if k != "unqueried_domains"}, "research_references": len(assets("research_index.json")),
             "credentials_values_logged": False,
             "scheduler": radar_cfg["scheduler"],
             "telegram": telegram.status(store) if (store.workspace / "radar.json").exists() else {"enabled": False},
             "blue_ocean": {"candidates": len(store.records("blue_ocean")),
+                           "frontier_hypotheses": len(store.records("frontier_hypothesis")),
+                           "frontier_batches": len(store.records("frontier_batch")),
                            "next_actions": len(blue_ocean.next_actions(store, 50)["items"]),
                            "unmanaged_radar_hypotheses": sum(i["action"] == "adopt" for i in sync_preview["items"]),
                            "qualitative_experiments": sum(e.get("method_type") == "qualitative" for e in validation_plans),
@@ -136,8 +139,10 @@ def read_only_command(args):
         return True
     if args.command == "blue-ocean":
         return args.action in {"template", "status", "next", "history", "signals", "patterns", "lag",
-                               "transfers", "portfolio", "design", "sources", "metrics", "search", "catch-up"} or \
-               (args.action == "bootstrap" and not args.apply)
+                               "transfers", "portfolio", "design", "sources", "metrics", "search", "catch-up",
+                               "frontier", "frontier-template", "frontier-list"} or \
+               (args.action == "bootstrap" and not args.apply) or \
+               (args.action == "tournament" and not args.apply)
     if args.command == "operator":
         return args.action in {"template", "status", "plan", "task-board", "monthly", "variance",
                                "failures", "kpi-defaults", "overview"}
@@ -211,6 +216,14 @@ def run(args):
                         args.stage, args.max_budget, args.due_before)}
         if args.command == "blue-ocean" and args.action == "catch-up":
             return venture_intelligence.catch_up(store, args.since)
+        if args.command == "blue-ocean" and args.action == "frontier":
+            return frontier.frontier_packet(store, args.topic, args.limit)
+        if args.command == "blue-ocean" and args.action == "frontier-template":
+            return frontier.tournament_template()
+        if args.command == "blue-ocean" and args.action == "frontier-list":
+            return frontier.saved_hypotheses(store)
+        if args.command == "blue-ocean" and args.action == "tournament" and not args.apply:
+            return frontier.evaluate_tournament(store, json.loads(Path(args.file).read_text()), apply=False)
         if args.command == "blue-ocean" and args.action == "bootstrap" and not args.apply:
             return prevalidation.bootstrap(store, args.id, args.limit, apply=False)
         if args.command == "blue-ocean" and args.action == "onboard":
@@ -224,7 +237,7 @@ def run(args):
                     "unmanaged_research_count": sum(row["action"] in ("adopt", "adopt_dossier") for row in adoption["items"]),
                     "founder_profile_configured": profile is not None,
                     "first_question": "이번 달 직접 접근 가능한 고객 집단은 누구인가요?" if not profile else None,
-                    "next_step": next_step,
+                    "next_step": next_step + " 후 blue-ocean frontier로 30→10→3 참신성 토너먼트 실행",
                     "boundary": "초기 안내이며 자동 아이디어 생성·검증 또는 API 연결 성공이 아닙니다."}
         if args.command == "operator" and args.action == "template":
             return venture_ops.template(args.kind) if args.kind in ("task", "task-result", "action", "action-transition") else founder_ops.template(args.kind)
@@ -259,7 +272,9 @@ def run(args):
                     report = blue_ocean.brief(store)
                     return {"discovery": prepared, "brief": report, "operator": venture_ops.status(store),
                             "prevalidation": prevalidation.bootstrap(store, limit=min(args.limit, 5), apply=False),
-                            "boundary": "실제 원문 검토·아이디어 판단은 Codex가 이어서 수행해야 합니다. 명령 자체는 자동 추론 모델이 아닙니다."}
+                            "boundary": "프런티어 조합은 발산 재료입니다. Codex가 실제 원문을 열고 30→10→3 토너먼트를 완료해야 하며, 명령 자체는 고객 수요를 검증하지 않습니다."}
+                if args.action == "tournament":
+                    return frontier.evaluate_tournament(store, json.loads(Path(args.file).read_text()), apply=True)
                 if args.action == "template":
                     return blue_ocean.template()
                 if args.action == "save":
@@ -548,6 +563,14 @@ def main():
     r.add_argument("--due-before")
     r = actions.add_parser("catch-up", help="Show saved changes since the last visit")
     r.add_argument("--since", required=True)
+    r = actions.add_parser("frontier", help="Build 30 structurally different discovery prompts before conservative validation")
+    r.add_argument("--topic", help="Optional customer change or market theme to narrow stored signal atoms")
+    r.add_argument("--limit", type=int, default=30, help="Divergent prompt count, 12..60; default 30")
+    actions.add_parser("frontier-template", help="Return the contract for the 30-to-10-to-3 novelty tournament")
+    r = actions.add_parser("tournament", help="Reject generic repackaging and compare novelty, evidence and execution separately")
+    r.add_argument("--file", required=True)
+    r.add_argument("--apply", action="store_true", help="Save all hypotheses and rejects as an immutable learning denominator")
+    actions.add_parser("frontier-list", help="List saved exploration hypotheses; these are not validated opportunities")
     r = actions.add_parser("bootstrap", help="Make progress before any experiment result exists")
     r.add_argument("--id", help="Candidate id or key; omit for a learning-priority portfolio")
     r.add_argument("--limit", type=int, default=5)
@@ -626,7 +649,7 @@ def main():
         actions.add_parser(name)
     r = actions.add_parser("prepare")
     r.add_argument("--no-refresh", action="store_true", help="Use stored evidence without network calls")
-    r.add_argument("--trigger", choices=("manual",), default="manual", help="v0.6.1 on-demand mode permits manual runs only")
+    r.add_argument("--trigger", choices=("manual",), default="manual", help="on-demand mode permits manual runs only")
     r.add_argument("--automation-id", help=argparse.SUPPRESS)
     r.add_argument("--resume", action="store_true", help="Resume a recent unfinished cycle of the same trigger")
     r = actions.add_parser("finish")

@@ -1,8 +1,10 @@
-# 허구김 · v0.6.1
+# 허구김 · v0.7.0
 
 한국의 약한 시장 신호에서 아직 충분히 해결되지 않은 고객 문제와 공급 공백을 찾고,
 아이디어를 검증·실행하고 창업자 적합성·시간·예산·WIP·실험·출시 KPI·보류·폐기·재개까지 관리하는
 개인용 Codex 창업 운영 에이전트 **허구김**.
+이번 버전은 `30→10→3` 프런티어 토너먼트를 추가해 참신한 구조 변화 가설을 먼저 발산하고, 평범한 재포장을 반증합니다.
+참신성·시의성·근거·실행 명확성은 별도로 표시하므로 최근 기사 한 건이나 오래된 재인용만으로 트렌드 선행 후보라 말하지 않습니다.
 기본 사용은 **추가 API 키와 예약 자동화 없이**, 사용자가 호출한 현재 Codex 작업에서 공개 웹 원문을 조사해
 블루오션 탐색과 아이디어 포트폴리오 운영을 수행한다. 공모전·지원사업·협업은 명시적으로 요청할 때만 쓰는 선택 기능이다.
 API는 수집 범위/빈도를 확장하는 선택 사항일 뿐 핵심 기능의 선행 조건이 아니며 사업 성공이나 예측 정확도를 보장하지 않는다.
@@ -11,6 +13,9 @@ API는 수집 범위/빈도를 확장하는 선택 사항일 뿐 핵심 기능�
 
 ## 지금 포함된 것
 
+- `blue-ocean frontier`: 10개 발상 원리×8개 사업구조×한국 분야의 30개 발산 프롬프트. 프롬프트는 아이디어·근거가 아니므로 현재 원문을 실제 확인한다.
+- `blue-ocean tournament`: 단순 AI·통합 플랫폼 재포장, 기존 후보 의미 중복, 오래된 신호의 최신 트렌드 오인 등을 걸러 10개 준결승·최대 3개 탐색 가설을 선별한다. 모든 탈락·보류 기록을 남길 수 있다.
+- 프런티어/초기 신호/관측 가능 후보 구분과 참신성·시의성·근거·실행 명확성의 분리 평가. 트렌드 선행성·사업 성공확률은 별도 관측 없이는 주장하지 않는다.
 - blue-ocean 운영체제: 시장공백 8항목, 신호 6항목, 후보별 다음 행동·중단/재개 조건·상태 전이·판단 이력.
 - detected → watching → researching → validating → building → launched → scaling 생명주기와 parked/killed 관리.
 - 개인 창업 운영 프로필: 확인된 주간 시간·주간 예산·현금·보호 예비금·단계별 WIP 한도와 자동 운영 정책.
@@ -23,7 +28,7 @@ API는 수집 범위/빈도를 확장하는 선택 사항일 뿐 핵심 기능�
   자리 확보 또는 폐기 이후 확인된 새 근거에 따른 재개. 외부 연락·지출·게시·출시는 자동 실행하지 않음.
 - 경쟁사 검색 결과 0건을 블루오션으로 오인하지 않는 근거 게이트. UNKNOWN을 0점이나 임의 성공확률로 바꾸지 않음.
 - 레이더 가설→블루오션 후보→dossier→수치/정성 검증 결과를 연결하고, 직전 브리핑 이후 달라진 판단만 보여 주는 개인 창업 포트폴리오.
-- 기존 워크스페이스의 사용자 설정을 보존하면서 v0.6.1의 `on_demand`·API 무키 기본값을 채우는 안전한 설정 마이그레이션.
+- 기존 워크스페이스의 사용자 설정을 보존하면서 v0.7.0의 `on_demand`·API 무키·프런티어 탐색 기본값을 채우는 안전한 설정 마이그레이션.
 - 핵심 상태·포트폴리오·운영 조회는 읽기 전용 SQLite 연결을 사용해 수집 실행과의 쓰기 잠금 경합을 줄임.
 - `signal web-plan`: 공개 SNS·채용·특허·표준·논문·기술 가격·조달·앱·커머스·펀딩·규제·KOSIS/ECOS를 API 키 없이 조사할 검색·원문 검토 계약을 만든다.
 - `signal batch-import`: 실제 읽은 공개 원문 1~50개를 모두 검증한 뒤 원자적으로 저장하고 관련 후보를 즉시 재평가한다.
@@ -42,7 +47,7 @@ API는 수집 범위/빈도를 확장하는 선택 사항일 뿐 핵심 기능�
 - 주장·문제·아이디어·실험·피드백·예측/관측 이력, 변경 없는 후보 알림 억제.
 - 한국 경쟁/규제/시장/고객·MVP·GTM·지원사업·사업계획 검토를 위한 통합 스킬.
 - 수동 레이더: 공개 웹 계획 → 원문 검토 → Codex 아이디어 생성 → 필수 근거/고객/MVP/반증 검증 → 가설 카드 저장. 스케줄러를 요구하지 않는다.
-- 과거 텔레그램·예약 레이더 기록은 기존 사용자 호환을 위해 읽을 수 있지만 v0.6.1은 새 heartbeat 실행을 거부한다.
+- 과거 텔레그램·예약 레이더 기록은 기존 사용자 호환을 위해 읽을 수 있지만 v0.7.0은 새 heartbeat 실행을 거부한다.
 - 24항목 근거 연결형 dossier: 원문 위치·지지/반박·국내 검색·대안·미지수 → 다음 조사 과제.
 - 고객 문제·현재 행동·지불·한국 대안·전환 이유가 없는 카드는 알림 제외. 전송 직전에도 재검사.
 - 공식 공고 조건 대조: 필수 조건별 PASS/FAIL/UNKNOWN, 기준일·마감 시각·부분 검토·예외 한계 구분.
@@ -66,6 +71,10 @@ API는 수집 범위/빈도를 확장하는 선택 사항일 뿐 핵심 기능�
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path init
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean onboard
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean run --topic "고객 문제" --limit 6
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean frontier --topic "최근 고객 변화" --limit 30
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean frontier-template
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean tournament --file /absolute/frontier-candidates.json
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean tournament --file /absolute/frontier-candidates.json --apply
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean prepare --no-refresh --limit 6
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean sync
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean sync --apply
