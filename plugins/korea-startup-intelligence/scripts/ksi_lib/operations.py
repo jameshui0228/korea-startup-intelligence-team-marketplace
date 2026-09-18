@@ -88,10 +88,18 @@ def finish(store, packet_id, send=False):
                 "network_calls": 0}
     delivery = telegram.deliver(store, send=True, cycle_id=packet_id)
     maintenance = research.maintenance(store)
+    # If the founder has explicitly configured operating limits and policies,
+    # a completed research cycle also refreshes the local CEO operating brief.
+    # This can change local portfolio state but never performs external actions.
+    from . import founder_ops
+    founder_operations = founder_ops.weekly_brief(store, apply=True)
     result = {"status": "completed", "packet_id": packet_id, "trigger": run["trigger"],
               "automation_id": run["automation_id"], "completed_at": stamp(),
               "topics_reviewed": len(submissions), "cards_saved": sum(len(s["cards"]) for s in submissions.values()),
               "queue": queued, "delivery": delivery, "reports_generated": len(maintenance["generated"]),
+              "founder_operations": {"report_path": founder_operations["report_path"],
+                                     "actions": founder_operations["reconciliation"].get("actions", []),
+                                     "external_actions_executed": False},
               "blue_ocean_sync": portfolio_sync,
               "blue_ocean_changes": portfolio_brief["changes_since_previous_brief"],
               "boundary": "Research decisions and send receipts; neither scheduler proof nor validated market demand"}

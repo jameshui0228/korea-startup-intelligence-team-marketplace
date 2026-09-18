@@ -12,7 +12,7 @@ from ksi_lib.model import (REQUIRED, Store, assets, atomic_json, canonical_url, 
                            init_workspace, now, observation, parse_date, stamp, validate_record)
 from ksi_lib import (radar, telegram, research, grants, operations, venture, validation,
                      agenda, application, market, workbench, competition, trend_forecast,
-                     blue_ocean)
+                     blue_ocean, founder_ops)
 
 
 def edit_payload(store, path, kind, prefix):
@@ -52,6 +52,7 @@ def doctor(store):
                         "access": spec["access"]})
     sync_preview = blue_ocean.sync(store, apply=False)
     validation_plans = store.records("validation_plan")
+    operator_status = founder_ops.status(store)
     return {"workspace": str(store.workspace), "sqlite_integrity": store.db.execute("PRAGMA integrity_check").fetchone()[0],
             "workspace_profile_version": store.config.get("workspace_profile_version"),
             "sources": sources, "coverage": {k: v for k, v in coverage(store).items() if k != "unqueried_domains"}, "research_references": len(assets("research_index.json")),
@@ -62,6 +63,12 @@ def doctor(store):
                            "next_actions": len(blue_ocean.next_actions(store, 50)["items"]),
                            "unmanaged_radar_hypotheses": sum(i["action"] == "adopt" for i in sync_preview["items"]),
                            "qualitative_experiments": sum(e.get("method_type") == "qualitative" for e in validation_plans)},
+            "founder_operations": {"configured": operator_status["configured"],
+                                   "focus_candidates": len(operator_status["capacity_plan"].get("focus", [])),
+                                   "overflow_candidates": len(operator_status["capacity_plan"].get("overflow", [])),
+                                   "kpi_plans": operator_status["kpi_plans"],
+                                   "kpi_snapshots": operator_status["kpi_snapshots"],
+                                   "checkins": operator_status["checkins"]},
             "learning_boundary": "Persistent evidence and outcome records, not model weight training or guaranteed skill improvement"}
 
 
@@ -152,6 +159,12 @@ def run(args):
             return blue_ocean.status(store, args.id)
         if args.command == "blue-ocean" and args.action == "next":
             return blue_ocean.next_actions(store, args.limit)
+        if args.command == "operator" and args.action == "template":
+            return founder_ops.template(args.kind)
+        if args.command == "operator" and args.action == "status":
+            return founder_ops.status(store)
+        if args.command == "operator" and args.action == "plan":
+            return founder_ops.capacity_plan(store)
         with locked(store):
             if args.command == "blue-ocean":
                 if args.action == "prepare":
@@ -170,6 +183,25 @@ def run(args):
                     return blue_ocean.brief(store)
                 if args.action == "sync":
                     return blue_ocean.sync(store, args.apply)
+            if args.command == "operator":
+                if args.action == "configure":
+                    return founder_ops.configure(store, json.loads(Path(args.file).read_text()))
+                if args.action == "fit":
+                    return founder_ops.save_fit(store, json.loads(Path(args.file).read_text()))
+                if args.action == "pipeline":
+                    return founder_ops.save_pipeline(store, json.loads(Path(args.file).read_text()))
+                if args.action == "kpi-plan":
+                    return founder_ops.save_kpi_plan(store, json.loads(Path(args.file).read_text()))
+                if args.action == "kpi-snapshot":
+                    return founder_ops.save_kpi_snapshot(store, json.loads(Path(args.file).read_text()))
+                if args.action == "checkin":
+                    return founder_ops.save_checkin(store, json.loads(Path(args.file).read_text()))
+                if args.action == "reopen-signal":
+                    return founder_ops.save_reopen_signal(store, json.loads(Path(args.file).read_text()))
+                if args.action == "reconcile":
+                    return founder_ops.reconcile(store, args.apply)
+                if args.action == "weekly":
+                    return founder_ops.weekly_brief(store, args.week_start, args.apply)
             if args.command == 'workbench':
                 return workbench.execute(store, args.action, args)
             if args.command == "application":
@@ -380,6 +412,20 @@ def main():
     actions.add_parser("brief", help="Write a concise personal founder brief from the current portfolio")
     r = actions.add_parser("sync", help="Preview or apply evidence-preserving adoption of existing radar hypotheses")
     r.add_argument("--apply", action="store_true", help="Write the previewed portfolio adoption; never advances stages automatically")
+    s = sub.add_parser("operator", help="Personal founder fit, resources, WIP, experiment pipeline, KPI and CEO briefing")
+    actions = s.add_subparsers(dest="action", required=True)
+    r = actions.add_parser("template")
+    r.add_argument("kind", choices=("profile", "fit", "pipeline", "kpi-plan", "kpi-snapshot", "checkin", "reopen-signal"))
+    for name in ("configure", "fit", "pipeline", "kpi-plan", "kpi-snapshot", "checkin", "reopen-signal"):
+        r = actions.add_parser(name)
+        r.add_argument("--file", required=True)
+    actions.add_parser("status")
+    actions.add_parser("plan")
+    r = actions.add_parser("reconcile", help="Preview local lifecycle changes; --apply writes only local state")
+    r.add_argument("--apply", action="store_true")
+    r = actions.add_parser("weekly", help="Generate weekly CEO brief and optionally apply local operating policy")
+    r.add_argument("--week-start", help="KST Monday in YYYY-MM-DD; defaults to the current week")
+    r.add_argument("--apply", action="store_true")
     s = sub.add_parser("refresh")
     s.add_argument("--topic", action="append")
     s.add_argument("--source", action="append")
@@ -388,7 +434,9 @@ def main():
     s.add_argument("--force", action="store_true", help="Bypass freshness; use only for targeted diagnosis")
     s = sub.add_parser("list")
     s.add_argument("kind", choices=["evidence", "trend", "resolution", "opportunity", "blue_ocean", "blue_ocean_event", "dossier", "grant",
-                                    "venture_review", "validation_plan", "validation_result", "research_run", "research_receipt", "application"] + list(REQUIRED))
+                                    "venture_review", "validation_plan", "validation_result", "research_run", "research_receipt", "application",
+                                    "founder_profile", "founder_fit", "founder_pipeline", "founder_lifecycle",
+                                    "founder_kpi_plan", "founder_kpi_snapshot", "founder_checkin", "founder_reopen_signal"] + list(REQUIRED))
     s.add_argument("--topic")
     s.add_argument("--limit", type=int, default=20)
     s = sub.add_parser("record")

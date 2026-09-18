@@ -1,7 +1,8 @@
-# 허구김 · v0.2.2
+# 허구김 · v0.4.0
 
 한국의 약한 시장 신호에서 아직 충분히 해결되지 않은 고객 문제와 공급 공백을 찾고,
-아이디어를 검증·실행·보류·폐기까지 관리하는 개인용 Codex 창업 에이전트 **허구김**.
+아이디어를 검증·실행하고 창업자 적합성·시간·예산·WIP·실험·출시 KPI·보류·폐기·재개까지 관리하는
+개인용 Codex 창업 운영 에이전트 **허구김**.
 기본 사용은 **추가 API 키 없이 현재 Codex에서** 블루오션 탐색과 아이디어 포트폴리오 운영을 수행한다.
 공모전·지원사업·협업·텔레그램은 명시적으로 요청할 때만 쓰는 선택 기능이다.
 API는 수집 범위/빈도를 확장하는 선택 사항이며 사업 성공이나 예측 정확도를 보장하지 않는다.
@@ -12,9 +13,17 @@ API는 수집 범위/빈도를 확장하는 선택 사항이며 사업 성공이
 
 - blue-ocean 운영체제: 시장공백 8항목, 신호 6항목, 후보별 다음 행동·중단/재개 조건·상태 전이·판단 이력.
 - detected → watching → researching → validating → building → launched → scaling 생명주기와 parked/killed 관리.
+- 개인 창업 운영 프로필: 확인된 주간 시간·주간 예산·현금·보호 예비금·단계별 WIP 한도와 자동 운영 정책.
+- 후보별 창업자 적합성: 역량·고객 접근·동기·시간·자본·도메인·규제 차원을 합산 점수 없이 비교.
+- 자원 배분: 명시 우선순위·단계·기한을 따라 시간/예산/WIP를 배정하고, 미확인 요구량은 0으로 숨기지 않음.
+- interview → MVP → pricing → GTM validation plan 의존성, 결과에 따른 다음 행동·기한·예산 자동 연결.
+- 출시 이후 불변 KPI 정의와 사용자 소유 거래/집계 근거의 주간 snapshot·직전 주 변화.
+- 주간 check-in과 CEO 브리핑: 실제 시간·지출·장애물·결정·KPI·집중 후보·다음 행동 통합.
+- 정책 기반 로컬 자동 관리: WIP 초과/장기 미검토/적합성 충돌 보류, 사전 중단 기준 폐기,
+  자리 확보 또는 폐기 이후 확인된 새 근거에 따른 재개. 외부 연락·지출·게시·출시는 자동 실행하지 않음.
 - 경쟁사 검색 결과 0건을 블루오션으로 오인하지 않는 근거 게이트. UNKNOWN을 0점이나 임의 성공확률로 바꾸지 않음.
 - 레이더 가설→블루오션 후보→dossier→수치/정성 검증 결과를 연결하고, 직전 브리핑 이후 달라진 판단만 보여 주는 개인 창업 포트폴리오.
-- 기존 0.2.1 워크스페이스의 사용자 설정을 보존하면서 새 제품 기본값을 채우는 안전한 설정 마이그레이션.
+- 기존 워크스페이스의 사용자 설정을 보존하면서 v0.4.0 제품 기본값을 채우는 안전한 설정 마이그레이션.
 - 사용자 원본 **400개 분야·3,559개 세부항목·89개 압축 분류**와 2개 마스터 요청의 원문/해시 보존.
 - 기존 GitHub 조사 **177개 저장소 메타데이터 색인**과 실제 설계에 반영한 출처.
 - 신규 GitHub·Hacker News·Google Trending RSS·Google News RSS 읽기 전용 수집.
@@ -53,6 +62,13 @@ python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path bl
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean status
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean next
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path blue-ocean brief
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path operator template profile
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path operator configure --file /absolute/founder-profile.json
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path operator status
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path operator plan
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path operator reconcile
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path operator reconcile --apply
+python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path operator weekly --week-start 2026-09-14
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path market-map --limit 400
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path research-work plan --limit 6
 python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path domains --query "제조"
@@ -155,6 +171,8 @@ python3 /absolute/plugin/path/scripts/ksi.py --workspace /absolute/state/path gr
 입력 계약은 [조사 작업대](skills/korea-startup-intelligence/references/research-workbench.md)와
 [공고 매칭](skills/korea-startup-intelligence/references/grant-matching.md)에 있다. 임의 예시를 실제 연구 자료로 저장하지 않는다.
 `prepare` 출력은 Codex가 실제로 검토·작성할 자료이지 완성된 사업계획서가 아니다.
+[개인 창업 운영](skills/korea-startup-intelligence/references/founder-operations.md)은 창업자 적합성,
+자원/WIP, 실험 연결, KPI, 주간 CEO 브리핑과 자동 상태 관리의 입력·안전 경계를 설명한다.
 [gstack 적용 방식](skills/korea-startup-intelligence/references/gstack-operating-model.md)과
 [API 없는 지원사업 작업대](skills/korea-startup-intelligence/references/application-workbench.md)를 필요에 맞춰 사용한다.
 

@@ -50,7 +50,10 @@ TRANSITIONS = {
     "building": {"validating", "launched", "parked", "killed"},
     "launched": {"building", "scaling", "parked", "killed"},
     "scaling": {"launched", "parked", "killed"},
-    "parked": {"watching", "researching", "killed"},
+    # An operator-managed WIP pause may occur at any active stage. Reopening to
+    # the preserved stage still passes the normal validating/building/launch
+    # gates below; this broad transition set does not bypass evidence checks.
+    "parked": set(ACTIVE_STAGES) | {"killed"},
     "killed": {"watching", "researching"},
 }
 
