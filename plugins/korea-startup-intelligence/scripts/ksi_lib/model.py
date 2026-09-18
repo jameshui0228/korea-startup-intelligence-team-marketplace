@@ -166,6 +166,10 @@ def migrate_config(path, config):
         if key not in migrated:
             # JSON round-trip provides an independent copy for mutable defaults.
             migrated[key] = json.loads(json.dumps(value, ensure_ascii=False))
+    # Product focus is descriptive metadata, not a founder preference. Upgrade
+    # only the exact prior default; preserve any custom value a user supplied.
+    if migrated.get("product_focus") == "blue_ocean_discovery_and_venture_lifecycle":
+        migrated["product_focus"] = DEFAULT_CONFIG["product_focus"]
     migrated["workspace_profile_version"] = DEFAULT_CONFIG["workspace_profile_version"]
     if migrated != config:
         atomic_json(path, migrated)

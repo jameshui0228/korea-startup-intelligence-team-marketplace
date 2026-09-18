@@ -60,6 +60,19 @@ class WorkspaceTest(unittest.TestCase):
         persisted = json.loads((self.workspace / "config.json").read_text())
         self.assertEqual(persisted["optional_modules"], ["grants", "competitions", "team_workbench", "telegram"])
 
+    def test_legacy_product_focus_upgrades_but_custom_focus_is_preserved(self):
+        self.store.close()
+        config = {"schema_version": 1, "enabled_sources": [],
+                  "product_focus": "blue_ocean_discovery_and_venture_lifecycle"}
+        atomic_json(self.workspace / "config.json", config)
+        self.store = Store(self.workspace)
+        self.assertEqual(self.store.config["product_focus"], "blue_ocean_discovery_and_personal_founder_operations")
+        self.store.close()
+        config["product_focus"] = "user_custom_focus"
+        atomic_json(self.workspace / "config.json", config)
+        self.store = Store(self.workspace)
+        self.assertEqual(self.store.config["product_focus"], "user_custom_focus")
+
     def test_missing_credentials_not_queried(self):
         with patch("ksi_lib.engine.credentials", return_value={}), patch("ksi_lib.engine.collect") as call:
             r = refresh(self.store, ["test"], ["naver_news"], sector_batch=0)
