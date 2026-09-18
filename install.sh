@@ -11,6 +11,5 @@ fi
 codex plugin marketplace add "$TEAM_ROOT"
 codex plugin add korea-startup-intelligence@korea-startup-team
 
-echo "korea-startup-intelligence 0.1.1 설치 완료"
+echo "허구김 0.1.2 설치 완료"
 echo "Codex에서 새 작업을 열어 사용해 주세요."
-

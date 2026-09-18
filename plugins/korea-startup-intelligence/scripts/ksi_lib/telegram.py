@@ -17,8 +17,8 @@ from .radar import ensure_radar, valid_reviews
 from .research import opportunity_gate
 
 KEYS = ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID")
-CONNECTION_CHECK = "Korea Startup Intelligence 연결 확인\n\n확인하신 개인 대화로 알림을 보낼 수 있습니다. 이 메시지는 연결 시험이며 창업 아이디어나 트렌드 분석 결과가 아닙니다.\n\n30분 확인 주기에도 고객 문제·지불 근거·한국 대안·새 변화가 충분한 후보만 알립니다. 새로 보낼 만한 내용이 없으면 조용히 넘어갑니다. 선정·수상·예측 정확도를 보장하지 않습니다."
-DELIVERY_CHECK = "Korea Startup Intelligence 자동화 전송 점검\n\n업그레이드한 발송 경로로 보낸 시험 메시지입니다. 창업 아이디어나 예약 실행 완료 알림은 아닙니다.\n\n설정한 30분 점검에서 의미 있는 새 근거가 있는 후보만 공유합니다. 전송 결과가 불명확하면 자동 재전송하지 않고 확인 대상으로 남깁니다."
+CONNECTION_CHECK = "허구김 연결 확인\n\n확인하신 개인 대화로 알림을 보낼 수 있습니다. 이 메시지는 연결 시험이며 창업 아이디어나 트렌드 분석 결과가 아닙니다.\n\n30분 확인 주기에도 고객 문제·지불 근거·한국 대안·새 변화가 충분한 후보만 알립니다. 새로 보낼 만한 내용이 없으면 조용히 넘어갑니다. 선정·수상·예측 정확도를 보장하지 않습니다."
+DELIVERY_CHECK = "허구김 자동화 전송 점검\n\n업그레이드한 발송 경로로 보낸 시험 메시지입니다. 창업 아이디어나 예약 실행 완료 알림은 아닙니다.\n\n설정한 30분 점검에서 의미 있는 새 근거가 있는 후보만 공유합니다. 전송 결과가 불명확하면 자동 재전송하지 않고 확인 대상으로 남깁니다."
 SYSTEM_CARDS = ("connection-check", "delivery-check")
 
 

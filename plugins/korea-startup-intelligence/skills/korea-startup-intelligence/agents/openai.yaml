@@ -1,4 +1,4 @@
 interface:
-  display_name: "한국 창업 인텔리전스"
+  display_name: "허구김"
   short_description: "전 분야 아이디어 발굴과 최신 근거 기반 한국 창업 검증"
   default_prompt: "$korea-startup-intelligence로 오늘 한국 시장의 변화와 검증할 창업 기회를 찾아줘."

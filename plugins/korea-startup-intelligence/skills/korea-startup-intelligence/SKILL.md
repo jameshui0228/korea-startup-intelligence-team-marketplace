@@ -3,7 +3,7 @@ name: korea-startup-intelligence
 description: "한국에서 창업 기회, 전 분야 아이디어, 초기 트렌드, 해외에서 한국으로의 시장 공백, 고객 문제, 경쟁사, MVP, 정부지원사업 또는 창업경진대회를 조사·검증할 때 사용한다. 국내외 신호의 최신성과 접근 범위를 확인하고 근거·가설·실험·결과를 로컬 지식베이스에 누적한다. 한국 창업 트렌드 레이더, 아이디어 발굴·사업계획 검토·반복 학습 요청에 적용한다."
 ---
 
-# Korea Startup Intelligence
+# 허구김 — Korea Startup Intelligence
 
 ## 임무와 범위
 

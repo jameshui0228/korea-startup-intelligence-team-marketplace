@@ -342,7 +342,7 @@ def md(text):
 
 def render_report(report):
     c = report["coverage"]
-    lines = ["# 한국 창업 인텔리전스 · 수집 상태", "", f"생성: {report['generated_at']}",
+    lines = ["# 허구김 · 한국 창업 인텔리전스 수집 상태", "", f"생성: {report['generated_at']}",
              f"상태: {report['status']} · 요청 {report['requests_made']}/{report['request_budget']} · 이번 수집 {report['new_observations']}건", "",
              "이 보고서는 제목·링크·검색지수 수집 및 검토 후보 목록이다. 기사 본문 완독, 한국 전체 조사, 사업성 검증을 뜻하지 않는다.", "",
              f"분류표: {c['taxonomy_domains']}개 분야 / {c['taxonomy_subfields']}개 세부항목. 실제 조회 성공 {c['successfully_queried_domains']}개 분야; 심층 검토 {c['human_or_agent_reviewed_domains']}개.", "",

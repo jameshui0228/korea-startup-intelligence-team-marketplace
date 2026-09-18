@@ -1,6 +1,6 @@
-# Korea Startup Intelligence — Team Marketplace
+# 허구김 — Public Codex Marketplace
 
-누구나 `korea-startup-intelligence` 플러그인 0.1.1을 Codex에 설치할 수 있도록 만든 공개 마켓플레이스입니다.
+누구나 **허구김**(`korea-startup-intelligence`) 플러그인 0.1.2를 Codex에 설치할 수 있도록 만든 공개 마켓플레이스입니다.
 
 ## Codex에 플러그인으로 설치
 
