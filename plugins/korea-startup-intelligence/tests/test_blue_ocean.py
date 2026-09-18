@@ -168,6 +168,7 @@ class BlueOceanTest(unittest.TestCase):
         self.assertEqual(candidate["source_opportunity_id"], "idea-care-handoff")
         self.assertEqual(candidate["managed_by"], "radar_bridge")
         self.assertEqual(candidate["evidence_ids"], [self.row["id"]])
+        self.assertEqual(blue_ocean.sync(self.store)["items"][0]["action"], "current")
 
     def test_brief_reports_only_real_snapshot_changes(self):
         blue_ocean.save(self.store, self.payload())

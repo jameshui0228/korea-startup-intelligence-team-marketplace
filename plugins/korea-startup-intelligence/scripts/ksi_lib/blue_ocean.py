@@ -493,8 +493,19 @@ def sync(store, apply=False):
                 "boundary": "원본 근거 상태를 보존한 승계이며 시장성 검증이나 자동 단계 승격이 아닙니다."}
     for card in store.records("opportunity"):
         candidate = managed.get(card["opportunity_key"])
+        opportunity_revision = _record_revision(store, "opportunity", card["id"])
+        dossier_revision = _record_revision(store, "dossier", card.get("dossier_id")) if card.get("dossier_id") else None
+        if not candidate:
+            action = "adopt"
+        elif candidate.get("managed_by") != "radar_bridge":
+            action = "review_manual_merge"
+        elif candidate.get("source_opportunity_revision") == opportunity_revision and \
+                candidate.get("source_dossier_revision") == dossier_revision:
+            action = "current"
+        else:
+            action = "refresh"
         plan.append({"opportunity_id": card["id"], "candidate_id": "blue-ocean-" + card["opportunity_key"],
-                     "action": "adopt" if not candidate else "refresh" if candidate.get("managed_by") == "radar_bridge" else "review_manual_merge",
+                     "action": action,
                      "dossier_id": card.get("dossier_id")})
     return {"status": "preview", "items": plan, "would_write": False,
             "instruction": "blue-ocean sync --apply를 실행하면 근거를 늘리지 않고 후보를 승계합니다."}
