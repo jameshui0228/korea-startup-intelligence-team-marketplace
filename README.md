@@ -2,21 +2,27 @@
 
 팀원이 `korea-startup-intelligence` 플러그인 0.1.1을 설치하고 같은 배포본을 사용할 수 있도록 만든 비공개 팀 마켓플레이스입니다.
 
-## 설치
+## Codex에 플러그인으로 설치
 
-1. 전달받은 ZIP 파일의 압축을 풉니다.
-2. 터미널에서 압축을 푼 `korea-startup-intelligence-team-marketplace` 폴더로 이동합니다.
-3. 다음 명령을 실행합니다.
+먼저 저장소 소유자가 팀원의 GitHub 계정에 읽기 권한을 부여해야 합니다. 권한을 받은 팀원은 Codex 터미널에서 다음 명령을 실행합니다.
 
 ```bash
-bash install.sh
+codex plugin marketplace add jameshui0228/korea-startup-intelligence-team-marketplace --ref main
+codex plugin add korea-startup-intelligence@korea-startup-team
 ```
 
-4. Codex에서 새 작업을 열어 플러그인을 사용합니다.
+설치가 끝나면 Codex에서 새 작업을 열어 플러그인을 사용합니다.
+
+로컬 복사본으로 설치해야 하는 경우에만 저장소 폴더에서 `bash install.sh`를 실행합니다.
 
 ## 업데이트
 
-저장소의 최신 변경을 받은 뒤 `bash install.sh`를 다시 실행합니다.
+마켓플레이스와 플러그인을 새로 받아 설치합니다.
+
+```bash
+codex plugin marketplace upgrade korea-startup-team
+codex plugin add korea-startup-intelligence@korea-startup-team
+```
 
 ## 공유되지 않는 정보
 
