@@ -282,12 +282,12 @@ class TelegramOperationsTest(unittest.TestCase):
         self.assertEqual(result["error"], "delivery_outcome_unknown")
         self.assertNotIn("raw_secret_fixture_value", json.dumps(telegram.history(self.store)))
 
-    def test_heartbeat_and_manual_cycles_are_not_mixed(self):
+    def test_on_demand_mode_rejects_new_heartbeat_cycles(self):
         first = radar.prepare(self.store, no_refresh=True)
-        second = radar.prepare(self.store, no_refresh=True, trigger="heartbeat", automation_id="fixture")
+        with self.assertRaisesRegex(ValueError, "on_demand"):
+            radar.prepare(self.store, no_refresh=True, trigger="heartbeat", automation_id="fixture")
         resumed = radar.prepare(self.store, trigger="manual", resume=True)
         self.assertEqual(resumed["packet_id"], first["packet_id"])
-        self.assertNotEqual(first["packet_id"], second["packet_id"])
 
     def test_finish_refuses_unreviewed_topics(self):
         first = radar.prepare(self.store, no_refresh=True)
@@ -380,7 +380,7 @@ class TelegramOperationsTest(unittest.TestCase):
                 operations.load_packet(self.store, first["packet_id"])
 
     def test_trigger_label_requires_automation_id(self):
-        for trigger, aid in (("heartbeat", None), ("manual", "fixture"), ("other", None)):
+        for trigger, aid in (("heartbeat", None), ("heartbeat", "fixture"), ("manual", "fixture"), ("other", None)):
             with patch("ksi_lib.radar.refresh") as refresh, self.assertRaises(ValueError):
                 radar.prepare(self.store, trigger=trigger, automation_id=aid)
             refresh.assert_not_called()

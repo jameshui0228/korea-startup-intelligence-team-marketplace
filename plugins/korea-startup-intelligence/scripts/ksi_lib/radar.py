@@ -228,6 +228,8 @@ def prepare(store, no_refresh=False, trigger="manual", automation_id=None, resum
     from .research import research_plan
     from .operations import validate_trigger, start_run, resume_run
     cfg = ensure_radar(store)
+    if cfg.get("operating_mode") == "on_demand" and (trigger != "manual" or automation_id is not None):
+        raise ValueError("on_demand 모드는 수동 실행만 허용합니다. 예약·heartbeat 자동화는 사용하지 않습니다.")
     validate_trigger(trigger, automation_id)
     if resume:
         existing = resume_run(store, trigger, automation_id)
