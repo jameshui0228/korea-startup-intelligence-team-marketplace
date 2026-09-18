@@ -1,6 +1,6 @@
 # 허구김 — Public Codex Marketplace
 
-누구나 **허구김**(`korea-startup-intelligence`) 플러그인 0.5.1을 Codex에 설치할 수 있도록 만든 공개 마켓플레이스입니다.
+누구나 **허구김**(`korea-startup-intelligence`) 플러그인 0.5.2를 Codex에 설치할 수 있도록 만든 공개 마켓플레이스입니다.
 한국의 초기 시장공백 탐지부터 근거 검토, 아이디어 검증, 창업자 시간·예산 배분, 실행·보류·폐기 관리까지 다룹니다. 공모전·텔레그램은 선택 기능입니다. 직접 연결되지 않은 SNS·공식 통계 등을 실시간 수집하거나 사업 성공을 보장하지는 않습니다. [76개 개선 항목의 구현·대기 상태](plugins/korea-startup-intelligence/ACCEPTANCE_76.md)를 확인해 주세요.
 
 ## Codex에 플러그인으로 설치

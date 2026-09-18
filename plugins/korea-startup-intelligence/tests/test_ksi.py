@@ -14,7 +14,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from build_resources import parse_taxonomy
 from ksi import doctor, import_evidence, resolve_forecast
 from ksi_lib.collectors import (FetchError, decode_json, fetch, google_news, google_trends,
-                                hub_headers, naver_search, naver_trend, safe_xml, youtube, bizinfo, github_new, hackernews)
+                                hub_headers, naver_search, naver_trend, safe_xml, youtube, bizinfo, github_new, hackernews,
+                                kosis_registered_series, crossref_recent)
 from ksi_lib.engine import analyze_series, choose_domains, coverage, dedupe, refresh, summarize_topic
 from ksi_lib.model import (KST, Store, assets, atomic_json, canonical_url, credentials, init_workspace,
                            now, observation, parse_date, stamp, validate_record)
@@ -54,11 +55,23 @@ class WorkspaceTest(unittest.TestCase):
         self.store.close()
         atomic_json(self.workspace / "config.json", {"schema_version": 1, "enabled_sources": ["google_news_rss"]})
         self.store = Store(self.workspace)
-        self.assertEqual(self.store.config["workspace_profile_version"], 5)
+        self.assertEqual(self.store.config["workspace_profile_version"], 6)
         self.assertEqual(self.store.config["product_focus"], "blue_ocean_discovery_and_personal_founder_operations")
         self.assertEqual(self.store.config["enabled_sources"], ["google_news_rss"])
         persisted = json.loads((self.workspace / "config.json").read_text())
         self.assertEqual(persisted["optional_modules"], ["grants", "competitions", "team_workbench", "telegram"])
+
+    def test_exact_legacy_default_sources_gain_public_crossref_but_custom_sources_do_not(self):
+        self.store.close()
+        atomic_json(self.workspace / "config.json", {"schema_version": 1, "enabled_sources": [
+            "github_new", "hackernews", "google_trends_rss", "google_news_rss"]})
+        self.store = Store(self.workspace)
+        self.assertIn("crossref_recent", self.store.config["enabled_sources"])
+        self.store.close()
+        atomic_json(self.workspace / "config.json", {"schema_version": 1,
+                    "enabled_sources": ["github_new", "google_news_rss"]})
+        self.store = Store(self.workspace)
+        self.assertEqual(self.store.config["enabled_sources"], ["github_new", "google_news_rss"])
 
     def test_legacy_product_focus_upgrades_but_custom_focus_is_preserved(self):
         self.store.close()
@@ -448,6 +461,36 @@ class PureTest(unittest.TestCase):
             rows, receipt = bizinfo({"BIZINFO_API_KEY": "test"}, 5)
         self.assertEqual(rows[0]["url"], "https://www.bizinfo.go.kr/notice/1")
         self.assertTrue(rows[0]["metrics"]["eligibility"].startswith("UNKNOWN"))
+
+    def test_kosis_registered_series_keeps_measurement_definition(self):
+        payload = [{"ORG_ID": "101", "TBL_ID": "DT_TEST", "TBL_NM": "시험 통계",
+                    "ITM_NM": "사업체 수", "UNIT_NM": "개", "PRD_DE": "2025", "DT": "1,234",
+                    "LST_CHN_DE": "20260901"}]
+        config = json.dumps({"label": "한국 사업체", "userStatsId": "tester/DT_TEST",
+                             "prdSe": "Y", "latest_periods": 3, "definition": "연간 사업체 수",
+                             "population": "대한민국 등록 사업체", "normalization": "원자료"})
+        with patch("ksi_lib.collectors.fetch", return_value=(json.dumps(payload).encode(), {})) as call:
+            rows, receipt = kosis_registered_series(config, {"KOSIS_API_KEY": "test"}, 5)
+        self.assertIn("statisticsData.do", call.call_args.args[0])
+        self.assertNotIn("test", rows[0]["url"])
+        self.assertEqual(rows[0]["metrics"]["value"], 1234.0)
+        self.assertEqual(rows[0]["measurement"]["unit"], "개")
+        self.assertEqual(rows[0]["measurement"]["population"], "대한민국 등록 사업체")
+        self.assertEqual(receipt["numeric_rows_saved"], 1)
+
+    def test_crossref_uses_deposit_date_without_claiming_adoption(self):
+        payload = {"status": "ok", "message": {"total-results": 50, "items": [{
+            "DOI": "10.1234/example", "title": ["New sensing method"],
+            "created": {"date-time": "2026-09-17T10:00:00Z"}, "published": {"date-parts": [[2026, 8]]},
+            "publisher": "Example Society", "type": "journal-article", "is-referenced-by-count": 2,
+        }]}}
+        with patch("ksi_lib.collectors.fetch", return_value=(json.dumps(payload).encode(), {})) as call:
+            rows, receipt = crossref_recent("sensing", 5)
+        self.assertIn("from-created-date", call.call_args.args[0])
+        self.assertEqual(rows[0]["deposited_at"], "2026-09-17T10:00:00Z")
+        self.assertIn("deposit_date_not_publication_date", rows[0]["limitations"])
+        self.assertEqual(rows[0]["geography"], "global_metadata")
+        self.assertEqual(receipt["saved_items"], 1)
 
     def test_github_snapshot_not_growth(self):
         payload = {"items": [{"full_name": "x/y", "html_url": "https://github.com/x/y", "created_at": stamp(now()), "stargazers_count": 100}]}

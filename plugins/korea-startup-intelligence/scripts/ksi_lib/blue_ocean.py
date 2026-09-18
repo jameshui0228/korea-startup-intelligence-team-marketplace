@@ -813,7 +813,8 @@ def next_actions(store, limit=10):
     rows = status(store)["candidates"]
     rows = [r for r in rows if r["candidate"]["stage"] in ACTIVE_STAGES]
     decisions = {row["candidate_id"]: row for row in intelligence.portfolio_decisions(store, assess)["items"]}
-    rows.sort(key=lambda r: (bool(decisions[r["candidate"]["id"]]["dominated_by"]),
+    rows.sort(key=lambda r: (decisions[r["candidate"]["id"]]["comparison_status"] != "comparable",
+                             bool(decisions[r["candidate"]["id"]]["dominated_by"]),
                              not r["assessment"]["review_overdue"],
                              r["assessment"]["recommended_transition"] is None,
                              -sum(v for v in decisions[r["candidate"]["id"]]["decision_vector"].values() if v is not None),
@@ -822,14 +823,16 @@ def next_actions(store, limit=10):
                         "stage": r["candidate"]["stage"], "whitespace_state": r["assessment"]["whitespace_state"],
                         "next_action": r["candidate"]["next_action"],
                         "recommended_transition": r["assessment"]["recommended_transition"],
-                        "priority_reason": ("재검토 기한 초과" if r["assessment"]["review_overdue"] else
+                        "priority_reason": ("창업자 적합성·검증비 등 비교값 미확인" if
+                                            decisions[r["candidate"]["id"]]["comparison_status"] != "comparable" else
+                                            "재검토 기한 초과" if r["assessment"]["review_overdue"] else
                                             "단계 이동 조건 충족" if r["assessment"]["recommended_transition"] else
                                             "가장 가까운 사전 기한"),
                         "blocking_gaps": r["assessment"]["blocking_gaps"][:5],
                         "decision_support": decisions[r["candidate"]["id"]]}
                        for r in rows[:limit]],
             "founder_context": founder_context(store),
-            "ordering": "파레토 비지배→기한 초과→단계 이동 가능→사업가치·창업자 적합성·저비용 선택가치·접근성→가까운 기한. 성공 가능성 순위가 아닙니다."}
+            "ordering": "비교값 완비→파레토 비지배→기한 초과→단계 이동 가능→사업가치·창업자 적합성·저비용 선택가치·접근성→가까운 기한. 미확인 후보는 별도 조사 대상이며 성공 가능성 순위가 아닙니다."}
 
 
 def transition(store, payload):

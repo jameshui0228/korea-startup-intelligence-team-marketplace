@@ -6,6 +6,7 @@ into a probability of startup success.  Missing inputs remain visible.
 """
 from __future__ import annotations
 
+import json
 import math
 import re
 import unicodedata
@@ -17,12 +18,16 @@ from .model import assets, credentials, digest, now, parse_date, stamp
 
 DEMAND_KINDS = {"interview", "transaction", "aggregate_metric", "search_spike", "customer_observation"}
 SUPPLY_KINDS = {"repository", "product", "app", "patent", "standard", "procurement_award", "crowdfunding"}
+BEHAVIOR_KINDS = {"interview", "transaction", "customer_observation"}
+PUBLIC_BEHAVIOR_KINDS = {"review", "comment"}
+MARKET_SUPPLY_KINDS = {"product", "app", "procurement_award", "crowdfunding"}
 EARLY_LANES = {
     "jobs", "patents", "standards", "papers", "technology_cost", "procurement",
     "app_store", "commerce", "crowdfunding", "regulation", "official_statistics",
 }
 SOURCE_LANES = {
     "github_new": "technology", "hackernews": "technology",
+    "crossref_recent": "papers",
     "google_trends_rss": "search", "google_news_rss": "news",
     "naver_news": "news", "naver_blog": "community", "naver_cafe": "community",
     "naver_trend": "search", "youtube": "social", "youtube_uploads": "social",
@@ -39,6 +44,11 @@ SOURCE_LANES = {
 def _tokens(value):
     value = unicodedata.normalize("NFKC", str(value or "")).lower()
     return set(re.findall(r"[a-z0-9가-힣]{2,}", value))
+
+
+def _token_list(value):
+    value = unicodedata.normalize("NFKC", str(value or "")).lower()
+    return re.findall(r"[a-z0-9가-힣]{2,}", value)
 
 
 def _ngrams(value, size=3):
@@ -67,10 +77,24 @@ def glossary(store):
 
 def canonical_tokens(store, value):
     aliases = glossary(store)
-    result = set()
-    for token in _tokens(value):
-        result.add(aliases.get(token, token))
-    return result
+    raw = _token_list(value)
+    phrases = []
+    for alias, canonical in aliases.items():
+        source, target = tuple(_token_list(alias)), tuple(_token_list(canonical))
+        if source and target:
+            phrases.append((source, target))
+    phrases.sort(key=lambda pair: (-len(pair[0]), pair[0]))
+    output, index = [], 0
+    while index < len(raw):
+        match = next(((source, target) for source, target in phrases
+                      if tuple(raw[index:index + len(source)]) == source), None)
+        if match:
+            output.extend(match[1])
+            index += len(match[0])
+        else:
+            output.append(raw[index])
+            index += 1
+    return set(output)
 
 
 def semantic_duplicate_warnings(store, candidates=None):
@@ -151,7 +175,9 @@ def _pareto(rows):
     dimensions = ("business_value", "founder_fit", "option_value", "reachability")
     for row in rows:
         row["dominated_by"] = []
-        if any(row["decision_vector"].get(k) is None for k in dimensions):
+        row["unknown_dimensions"] = [k for k in dimensions if row["decision_vector"].get(k) is None]
+        row["comparison_status"] = "incomplete" if row["unknown_dimensions"] else "comparable"
+        if row["unknown_dimensions"]:
             continue
         for other in rows:
             if other is row or any(other["decision_vector"].get(k) is None for k in dimensions):
@@ -191,19 +217,82 @@ def portfolio_decisions(store, assessment_fn):
     _pareto(rows)
     stage_order = {"scaling": 0, "launched": 1, "building": 2, "validating": 3,
                    "researching": 4, "watching": 5, "detected": 6, "parked": 7, "killed": 8}
-    rows.sort(key=lambda row: (bool(row["dominated_by"]), not row["review_overdue"],
+    rows.sort(key=lambda row: (row["comparison_status"] != "comparable", bool(row["dominated_by"]),
+                               not row["review_overdue"],
                                -sum(v for v in row["decision_vector"].values() if v is not None),
                                stage_order.get(row["stage"], 99), row["candidate_id"]))
-    return {"items": rows, "pareto_frontier": [r["candidate_id"] for r in rows if not r["dominated_by"]],
-            "ordering": "비지배 후보→재검토 기한→확인된 사업가치·적합성·선택가치·접근성. 성공확률 아님."}
+    return {"items": rows, "pareto_frontier": [r["candidate_id"] for r in rows
+                                                  if r["comparison_status"] == "comparable" and not r["dominated_by"]],
+            "comparison_pending": [r["candidate_id"] for r in rows if r["comparison_status"] == "incomplete"],
+            "ordering": "비교값 완비→비지배 후보→재검토 기한→확인된 사업가치·적합성·선택가치·접근성. 미확인은 우수 후보로 간주하지 않음. 성공확률 아님."}
 
 
 def _event_time(row):
     return parse_date(row.get("event_at")) or parse_date(row.get("observed_at"))
 
 
+def _comparison_series(rows, reviewed_body):
+    """Return only explicitly keyed, same-basis demand/supply observations."""
+    grouped = defaultdict(lambda: defaultdict(lambda: {"demand": [], "supply": []}))
+    definitions = defaultdict(lambda: {"demand": set(), "supply": set()})
+    for row in rows:
+        key, role, measurement = row.get("comparison_key"), row.get("demand_or_supply"), row.get("measurement")
+        value = row.get("metrics", {}).get("value")
+        if not key or role not in ("demand", "supply") or not isinstance(measurement, dict) or \
+                isinstance(value, bool) or type(value) not in (int, float) or not math.isfinite(value):
+            continue
+        if row.get("collection_basis") not in ("user_owned", "authorized_export") and not reviewed_body(row):
+            continue
+        required = ("definition", "unit", "population", "period", "normalization", "vintage")
+        if any(not isinstance(measurement.get(field), str) or not measurement[field].strip() for field in required):
+            continue
+        basis = (measurement["unit"], measurement["population"], measurement["normalization"], measurement["vintage"])
+        group_key = (key, basis)
+        grouped[group_key][measurement["period"]][role].append((row, value))
+        definitions[group_key][role].add(measurement.get("definition"))
+    output = []
+    for (key, basis), periods in grouped.items():
+        points = []
+        for period, roles in sorted(periods.items()):
+            if len(roles["demand"]) != 1 or len(roles["supply"]) != 1:
+                continue
+            demand_row, demand_value = roles["demand"][0]
+            supply_row, supply_value = roles["supply"][0]
+            if (demand_row.get("origin_key") or demand_row["url"]) == (supply_row.get("origin_key") or supply_row["url"]):
+                continue
+            points.append({"period": period, "demand": demand_value, "supply": supply_value,
+                           "difference": demand_value - supply_value,
+                           "demand_evidence_id": demand_row["id"], "supply_evidence_id": supply_row["id"]})
+        if points:
+            change = points[-1]["difference"] - points[0]["difference"] if len(points) >= 3 else None
+            output.append({"comparison_key": key, "unit": basis[0], "population": basis[1],
+                           "normalization": basis[2], "vintage": basis[3],
+                           "demand_definitions": sorted(definitions[(key, basis)]["demand"]),
+                           "supply_definitions": sorted(definitions[(key, basis)]["supply"]), "points": points,
+                           "status": "three_or_more_completed_periods" if len(points) >= 3 else "insufficient_periods",
+                           "difference_change": change,
+                           "boundary": "명시된 동일 비교 기준의 기술 차이입니다. 시장 전체 수요·공급 또는 인과적 기회 증명이 아닙니다."})
+    return sorted(output, key=lambda row: row["comparison_key"])
+
+
 def signal_graph(store):
     observations = store.observations()
+    from .radar import evidence_signature
+    reviews = {}
+    if store.db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='source_reviews'").fetchone():
+        reviews = {row["evidence_id"]: row for row in store.db.execute(
+            "SELECT evidence_id,reviewed_at,evidence_hash,data FROM source_reviews")}
+
+    def reviewed_body(row):
+        review = reviews.get(row["id"])
+        return bool(review and review["evidence_hash"] == evidence_signature(row) and
+                    parse_date(review["reviewed_at"]) and
+                    parse_date(review["reviewed_at"]) >= now() - timedelta(days=14) and
+                    json.loads(review["data"]).get("read_scope") != "metadata_only")
+
+    def origin(row):
+        return row.get("origin_key") or row.get("publisher") or row["url"]
+
     groups = defaultdict(list)
     for row in observations:
         concept = " ".join(sorted(canonical_tokens(store, row.get("topic") or row.get("title"))))
@@ -213,7 +302,7 @@ def signal_graph(store):
     clusters = []
     for key, rows in groups.items():
         rows.sort(key=lambda row: _event_time(row) or now())
-        origins = {row.get("origin_key") or row.get("publisher") or row["url"] for row in rows}
+        origins = {origin(row) for row in rows}
         lanes = {SOURCE_LANES.get(row.get("source"), row.get("source", "unknown")) for row in rows}
         geographies = {row.get("geography", "unknown") for row in rows}
         dates = {_event_time(row).date().isoformat() for row in rows if _event_time(row)}
@@ -232,8 +321,18 @@ def signal_graph(store):
                   row.get("demand_or_supply") == "demand"]
         supply = [row for row in rows if row.get("kind") in SUPPLY_KINDS or
                   row.get("demand_or_supply") == "supply"]
-        low_base = any((value if isinstance(value, (int, float)) else math.inf) < 10
-                       for row in rows for value in row.get("metrics", {}).values())
+        behavior = [row for row in rows if (row.get("kind") in BEHAVIOR_KINDS or
+                                             (row.get("kind") in PUBLIC_BEHAVIOR_KINDS and
+                                              row.get("speaker_role") == "customer")) and
+                    not row.get("promotion_or_ad") and
+                    (row.get("collection_basis") in ("user_owned", "authorized_export") or reviewed_body(row))]
+        behavior_origins = {origin(row) for row in behavior}
+        behavior_days = {_event_time(row).date().isoformat() for row in behavior if _event_time(row)}
+        market_supply_origins = {origin(row) for row in rows if row.get("kind") in MARKET_SUPPLY_KINDS}
+        comparisons = _comparison_series(rows, reviewed_body)
+        low_base = any(type(value) in (int, float) and 0 <= value < 10 and
+                       (metric.endswith("_count") or metric.endswith("_views") or metric in ("views", "transactions"))
+                       for row in rows for metric, value in row.get("metrics", {}).items())
         risks = []
         if len(origins) < 2:
             risks.append("single_origin")
@@ -241,8 +340,14 @@ def signal_graph(store):
             risks.append("single_signal_lane")
         if low_base:
             risks.append("low_baseline")
-        if all(lane in {"news", "social"} for lane in lanes):
+        if not behavior and all(lane in {"news", "social"} for lane in lanes):
             risks.append("attention_only_no_behavioral_demand")
+        if demand and not behavior:
+            risks.append("demand_proxy_without_customer_behavior")
+        if behavior and not market_supply_origins:
+            risks.append("market_supply_not_sampled")
+        if behavior and market_supply_origins and not comparisons:
+            risks.append("demand_supply_sampling_not_comparable")
         if any(row.get("promotion_or_ad") for row in rows):
             risks.append("promotion_or_ad")
         if any(row.get("seasonal_event") for row in rows):
@@ -258,11 +363,18 @@ def signal_graph(store):
             "persistence_days": len(dates), "novelty": _cluster_novelty(rows),
             "manipulation_risks": risks, "first_by_lane": first_by_lane, "lead_lag": lead_lag,
             "demand_signals": len(demand), "supply_signals": len(supply),
-            "demand_supply_gap": len(demand) - len(supply),
-            "gap_status": "demand_ahead_of_supply_unverified" if len(demand) >= 2 and len(demand) > len(supply) else
-                          "supply_ahead_of_demand" if len(supply) > len(demand) else "unresolved",
+            "behavioral_demand_origins": len(behavior_origins), "behavioral_demand_days": len(behavior_days),
+            "market_supply_origins": len(market_supply_origins),
+            "explicit_comparisons": comparisons,
+            "raw_observation_count_difference": len(demand) - len(supply),
+            "comparison_basis": "unmatched_raw_observation_counts_not_market_gap",
+            "gap_status": "comparable_series_observed" if any(c["status"] == "three_or_more_completed_periods" for c in comparisons) else
+                          "comparable_points_insufficient" if comparisons else
+                          "comparison_design_needed" if behavior_origins and market_supply_origins else
+                          "supply_audit_needed" if behavior_origins and not market_supply_origins else
+                          "proxy_only" if demand and not behavior else "unresolved",
         })
-    clusters.sort(key=lambda row: (-row["demand_supply_gap"], -row["persistence_days"], row["cluster_id"]))
+    clusters.sort(key=lambda row: (-row["behavioral_demand_origins"], -row["persistence_days"], row["cluster_id"]))
     return {"clusters": clusters, "observation_count": len(observations),
             "boundary": "동일 개념 후보를 묶은 기술통계입니다. 동일 사건·인과·수요는 원문 검토로 확인해야 합니다."}
 
@@ -306,11 +418,15 @@ def opportunity_patterns(store):
             reverse.append({"cluster_id": cluster["cluster_id"], "topics": cluster["topics"],
                             "hypothesis": "감소·퇴출·공급 축소가 남긴 전환·이전·유지보수 문제를 조사",
                             "status": "research_prompt_not_opportunity"})
-        if cluster["persistence_days"] >= 3 and cluster["demand_signals"] >= 2:
+        if cluster["behavioral_demand_days"] >= 3 and cluster["behavioral_demand_origins"] >= 2:
             evergreen.append({"cluster_id": cluster["cluster_id"], "topics": cluster["topics"],
                               "persistence_days": cluster["persistence_days"],
                               "status": "persistent_problem_candidate"})
-    return {"demand_supply_gaps": [row for row in graph["clusters"] if row["gap_status"] == "demand_ahead_of_supply_unverified"],
+    measured = [comparison for row in graph["clusters"] for comparison in row["explicit_comparisons"]]
+    return {"demand_supply_gaps": [],
+            "measured_comparisons": measured,
+            "gap_investigations": [row for row in graph["clusters"]
+                                   if row["gap_status"] in ("supply_audit_needed", "comparison_design_needed")],
             "reverse_opportunities": reverse, "evergreen_pains": evergreen}
 
 
@@ -428,6 +544,16 @@ RULE_FIELDS = {
     "active_users", "retention_rate", "repeat_purchase_rate", "gross_margin", "cac_krw",
     "competitor_count",
 }
+RULE_EVIDENCE_KINDS = {
+    "article", "post", "comment", "job", "patent", "standard", "paper", "price_change",
+    "procurement", "procurement_award", "app", "review", "product", "crowdfunding",
+    "regulation", "aggregate_metric", "search_spike", "customer_observation", "manual_evidence",
+    "interview", "transaction", "repository",
+}
+SCOPED_RULE_FIELDS = {
+    "evidence_count", "customer_evidence_count", "transaction_count", "active_users",
+    "retention_rate", "repeat_purchase_rate", "gross_margin", "cac_krw",
+}
 
 
 def validate_condition_set(value, name):
@@ -441,19 +567,38 @@ def validate_condition_set(value, name):
             raise ValueError(f"{name}: 지원 field와 gte/lte/eq/in 연산자를 사용하세요.")
         if "value" not in row:
             raise ValueError(f"{name}: 비교 value가 필요합니다.")
+        window = row.get("window_days")
+        if window is not None and (type(window) is not int or not 1 <= window <= 3650):
+            raise ValueError(f"{name}: window_days는 1~3650 정수입니다.")
+        evidence_kinds = row.get("evidence_kinds", [])
+        if not isinstance(evidence_kinds, list) or len(evidence_kinds) > 12 or \
+                any(not isinstance(item, str) or item not in RULE_EVIDENCE_KINDS for item in evidence_kinds):
+            raise ValueError(f"{name}: evidence_kinds는 지원되는 근거 종류 최대 12개입니다.")
+        if (window is not None or evidence_kinds) and row["field"] not in SCOPED_RULE_FIELDS:
+            raise ValueError(f"{name}: {row['field']}에는 기간·근거 종류 필터를 적용할 수 없습니다.")
         output.append({"field": row["field"], "operator": row["operator"], "value": row["value"],
-                       "window_days": row.get("window_days"), "evidence_kinds": row.get("evidence_kinds", [])})
+                       "window_days": window, "evidence_kinds": evidence_kinds})
     return output
 
 
-def condition_facts(store, candidate):
+def condition_facts(store, candidate, window_days=None, evidence_kinds=None):
     ids = set(candidate.get("evidence_ids", []))
     observations = [o for o in store.observations() if o["id"] in ids]
+    if evidence_kinds:
+        observations = [o for o in observations if o.get("kind") in set(evidence_kinds)]
+    if window_days is not None:
+        threshold = now() - timedelta(days=window_days)
+        observations = [o for o in observations if _event_time(o) and _event_time(o) >= threshold]
+    observations.sort(key=lambda row: _event_time(row) or now())
     facts = {
         "evidence_count": len(observations),
-        "customer_evidence_count": sum(o.get("kind") in ("interview", "transaction", "aggregate_metric") for o in observations),
+        "customer_evidence_count": sum((o.get("kind") in
+                                        ("interview", "transaction", "customer_observation", "aggregate_metric")) and
+                                       o.get("collection_basis") in ("user_owned", "authorized_export")
+                                       for o in observations),
         "transaction_count": sum(o.get("kind") == "transaction" for o in observations),
         "competitor_count": saturation(store, candidate)["competitor_count"],
+        "evaluated_evidence_ids": [o["id"] for o in observations],
     }
     metrics = {}
     for observation in observations:
@@ -474,7 +619,9 @@ def evaluate_conditions(store, candidate, rules):
     facts = condition_facts(store, candidate)
     results = []
     for rule in rules:
-        actual, expected, operator = facts.get(rule["field"]), rule["value"], rule["operator"]
+        scoped = condition_facts(store, candidate, rule.get("window_days"), rule.get("evidence_kinds")) \
+                 if rule["field"] in SCOPED_RULE_FIELDS else facts
+        actual, expected, operator = scoped.get(rule["field"]), rule["value"], rule["operator"]
         matched = False
         if actual is not None:
             try:
@@ -484,7 +631,8 @@ def evaluate_conditions(store, candidate, rules):
                            (operator == "in" and actual in expected))
             except (TypeError, ValueError):
                 matched = False
-        results.append({"rule": rule, "actual": actual, "matched": matched})
+        results.append({"rule": rule, "actual": actual, "matched": matched,
+                        "evaluated_evidence_ids": scoped["evaluated_evidence_ids"]})
     return {"matched": bool(results) and all(row["matched"] for row in results), "results": results, "facts": facts}
 
 

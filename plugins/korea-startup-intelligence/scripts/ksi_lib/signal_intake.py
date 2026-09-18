@@ -32,6 +32,7 @@ def template():
             "origin_group": None, "origin_note": None, "reviewer": None,
             "collection_basis": "public_source_verified", "limitations": [],
             "metrics": {}, "measurement": None, "demand_or_supply": "context",
+            "comparison_key": None, "speaker_role": "unknown",
             "promotion_or_ad": False, "seasonal_event": False, "bot_or_coordinated": False,
             "force_recheck": False,
             "warning": "원문을 실제 읽은 후 자기 말로 요약; 접근 제한 우회·개인정보·키 저장 금지"}
@@ -86,11 +87,21 @@ def import_signal(store, payload):
     role = payload.get("demand_or_supply", "context")
     if role not in ("demand", "supply", "context"):
         raise ValueError("demand_or_supply를 구분하세요.")
+    comparison_key = payload.get("comparison_key")
+    if comparison_key is not None:
+        if not isinstance(comparison_key, str) or not re.fullmatch(r"[a-zA-Z0-9가-힣_.:-]{1,120}", comparison_key):
+            raise ValueError("comparison_key는 영문·숫자·한글과 ._:- 조합 1~120자입니다.")
+        if role not in ("demand", "supply") or not measurement or type(metrics.get("value")) not in (int, float):
+            raise ValueError("comparison_key에는 수요/공급 역할과 measurement 및 숫자 metrics.value가 필요합니다.")
+    speaker_role = payload.get("speaker_role", "unknown")
+    if speaker_role not in ("customer", "provider", "advertiser", "expert", "unknown"):
+        raise ValueError("speaker_role은 customer/provider/advertiser/expert/unknown 중 하나입니다.")
     radar.ensure_radar(store)
     row = observation(source, kind, payload["topic"], payload["title"], url, stamp(event),
                       geography=payload.get("geography", "unknown"), domain_ids=domains,
                       content_scope="reviewed_" + scope, collection_basis=basis,
                       metrics=metrics, measurement=measurement, demand_or_supply=role,
+                      comparison_key=comparison_key, speaker_role=speaker_role,
                       promotion_or_ad=payload.get("promotion_or_ad", False),
                       seasonal_event=payload.get("seasonal_event", False),
                       bot_or_coordinated=payload.get("bot_or_coordinated", False),
@@ -107,7 +118,8 @@ def import_signal(store, payload):
     previous_review_row = store.db.execute("SELECT data FROM source_reviews WHERE evidence_id=?", (row["id"],)).fetchone()
     previous_review = json.loads(previous_review_row["data"]) if previous_review_row else None
     stable_fields = ("kind", "topic", "title", "url", "event_at", "geography", "domain_ids", "metrics",
-                     "measurement", "demand_or_supply", "promotion_or_ad", "seasonal_event", "bot_or_coordinated")
+                     "measurement", "demand_or_supply", "comparison_key", "speaker_role", "promotion_or_ad", "seasonal_event",
+                     "bot_or_coordinated")
     review_fields = ("read_scope", "family", "summary", "origin_group", "origin_note", "reviewer",
                      "collection_basis", "limitations")
     if not payload.get("force_recheck", False) and previous_row and previous_review and \

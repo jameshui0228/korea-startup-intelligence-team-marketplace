@@ -1,6 +1,7 @@
 """Bounded read-only adapters. Never emit credentials, raw error bodies or full articles."""
 import hashlib
 import json
+import math
 import re
 import ssl
 import urllib.error
@@ -23,14 +24,15 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 ALLOWED_HOSTS = {"naverapihub.apigw.ntruss.com", "trends.google.com", "news.google.com",
-                 "www.googleapis.com", "www.bizinfo.go.kr", "api.github.com", "hn.algolia.com", "api.x.com"}
+                 "www.googleapis.com", "www.bizinfo.go.kr", "api.github.com", "hn.algolia.com", "api.x.com",
+                 "kosis.kr", "api.crossref.org"}
 
 
 def fetch(url, headers=None, payload=None, timeout=12):
     parts = urllib.parse.urlsplit(url)
     if parts.scheme != "https" or parts.hostname not in ALLOWED_HOSTS or parts.username or parts.port:
         raise FetchError("unsupported_endpoint")
-    headers = {"User-Agent": "KoreaStartupIntelligence/0.1 (personal research; metadata only)",
+    headers = {"User-Agent": "KoreaStartupIntelligence/0.5.2 (personal research; metadata only)",
                "Accept": "application/json, application/rss+xml, application/xml", **(headers or {})}
     body = json.dumps(payload).encode() if payload is not None else None
     if body is not None:
@@ -296,6 +298,122 @@ def bizinfo(keys, timeout):
     return rows, receipt
 
 
+def kosis_registered_series(topic, keys, timeout):
+    """Fetch a bounded, user-registered KOSIS series.
+
+    The workspace stores only the registration ID and measurement definition;
+    the API key remains in the private credential store.  Rows without a
+    numeric value, period or provider unit are rejected instead of being
+    silently interpreted.
+    """
+    try:
+        spec = json.loads(topic)
+    except (TypeError, json.JSONDecodeError):
+        raise FetchError("kosis_series_config_invalid") from None
+    required = ("label", "userStatsId", "prdSe", "definition", "population", "normalization")
+    if not isinstance(spec, dict) or any(not isinstance(spec.get(field), str) or
+                                         not spec[field].strip() for field in required):
+        raise FetchError("kosis_series_config_invalid")
+    if any(len(spec[field]) > 240 for field in required) or not re.fullmatch(r"[A-Za-z0-9_.+/@:-]{1,160}", spec["userStatsId"]):
+        raise FetchError("kosis_series_config_invalid")
+    if not re.fullmatch(r"[A-Za-z0-9]{1,8}", spec["prdSe"]):
+        raise FetchError("kosis_series_config_invalid")
+    periods = spec.get("latest_periods", 3)
+    if type(periods) is not int or not 1 <= periods <= 12:
+        raise FetchError("kosis_series_config_invalid")
+    params = {"method": "getList", "apiKey": keys["KOSIS_API_KEY"],
+              "userStatsId": spec["userStatsId"], "prdSe": spec["prdSe"],
+              "newEstPrdCnt": periods, "format": "json", "jsonVD": "Y"}
+    raw, receipt = fetch("https://kosis.kr/openapi/statisticsData.do?" + urllib.parse.urlencode(params),
+                         timeout=timeout)
+    try:
+        result = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        raise FetchError("kosis_schema_changed") from None
+    if isinstance(result, dict) and any(key in result for key in ("err", "error", "errorCode")):
+        raise FetchError("provider_error_or_schema")
+    if not isinstance(result, list) or len(result) > 500:
+        raise FetchError("kosis_schema_changed")
+    rows = []
+    for item in result:
+        if not isinstance(item, dict):
+            raise FetchError("kosis_schema_changed")
+        period = clean(item.get("PRD_DE"), 40)
+        unit = clean(item.get("UNIT_NM"), 80)
+        raw_value = str(item.get("DT", "")).replace(",", "").strip()
+        if not period or not unit or not re.fullmatch(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)", raw_value):
+            continue
+        value = float(raw_value)
+        if not math.isfinite(value):
+            continue
+        table_id = clean(item.get("TBL_ID"), 80)
+        org_id = clean(item.get("ORG_ID"), 80)
+        table_name = clean(item.get("TBL_NM"), 160)
+        item_name = clean(item.get("ITM_NM"), 160)
+        if not table_id or not org_id or not table_name or not item_name:
+            raise FetchError("kosis_schema_changed")
+        public_url = "https://kosis.kr/statHtml/statHtml.do?" + urllib.parse.urlencode(
+            {"orgId": org_id, "tblId": table_id})
+        rows.append(observation("kosis", "aggregate_metric", spec["label"],
+                                f"{table_name} · {item_name} · {period}", public_url,
+                                metrics={"value": value},
+                                measurement={"definition": spec["definition"], "unit": unit,
+                                             "population": spec["population"], "period": period,
+                                             "normalization": spec["normalization"],
+                                             "vintage": clean(item.get("LST_CHN_DE"), 40) or "UNKNOWN"},
+                                reference_period=period, geography="KR", origin_key=f"kosis:{org_id}:{table_id}:{item_name}",
+                                content_scope="official_statistical_table_api",
+                                limitations=["registered_table_selection", "revision_possible",
+                                             "query_time_not_observation_time", "numeric_rows_only"]))
+    receipt.update({"coverage": "one_registered_series_latest_periods", "configured_latest_periods": periods,
+                    "provider_rows": len(result), "numeric_rows_saved": len(rows)})
+    return rows, receipt
+
+
+def crossref_recent(topic, timeout):
+    """Retrieve a small recent-deposit sample of scholarly metadata.
+
+    Deposit time is deliberately kept distinct from publication time.  This is
+    an early technology-research prompt, never evidence of Korean demand or a
+    paper's validity.
+    """
+    if not isinstance(topic, str) or not 1 <= len(topic) <= 120:
+        raise FetchError("crossref_topic_invalid")
+    since = (now() - timedelta(days=14)).date().isoformat()
+    params = {"query.title": topic, "filter": "from-created-date:" + since,
+              "rows": 10, "sort": "created", "order": "desc"}
+    raw, receipt = fetch("https://api.crossref.org/v1/works?" + urllib.parse.urlencode(params), timeout=timeout)
+    result = decode_json(raw)
+    message = result.get("message")
+    if result.get("status") != "ok" or not isinstance(message, dict) or not isinstance(message.get("items"), list):
+        raise FetchError("crossref_schema_changed")
+    rows = []
+    for item in message["items"][:10]:
+        if not isinstance(item, dict) or not isinstance(item.get("DOI"), str):
+            continue
+        titles = item.get("title")
+        title = titles[0] if isinstance(titles, list) and titles and isinstance(titles[0], str) else None
+        created = item.get("created", {}).get("date-time") if isinstance(item.get("created"), dict) else None
+        if not title or not created:
+            continue
+        doi = item["DOI"].strip()
+        if not doi or len(doi) > 200 or any(char.isspace() for char in doi):
+            continue
+        rows.append(observation("crossref_recent", "paper", topic, title,
+                                "https://doi.org/" + urllib.parse.quote(doi, safe="/():._-"), created,
+                                geography="global_metadata", publisher=clean(item.get("publisher"), 160) or "unknown",
+                                origin_key="crossref-doi:" + doi.lower(),
+                                metrics={"is_referenced_by_count_snapshot": item.get("is-referenced-by-count")},
+                                deposited_at=created, published_parts=item.get("published"), work_type=item.get("type"),
+                                content_scope="deposited_bibliographic_metadata",
+                                limitations=["deposit_date_not_publication_date", "query_sample_max10",
+                                             "publisher_metadata_not_peer_review_validation", "global_not_korean_demand",
+                                             "citation_snapshot_not_growth_or_commercial_adoption"]))
+    receipt.update({"coverage": "title_query_recent_deposits_first10", "provider_total_results": message.get("total-results"),
+                    "saved_items": len(rows), "date_basis": "crossref_created_deposit_time"})
+    return rows, receipt
+
+
 def collect(source, topic, keys, timeout):
     if source == 'youtube_uploads':
         return youtube_uploads(topic, keys, timeout)
@@ -317,6 +435,10 @@ def collect(source, topic, keys, timeout):
         return youtube_statistics(topic, keys, timeout)
     if source == "bizinfo":
         return bizinfo(keys, timeout)
+    if source == "kosis":
+        return kosis_registered_series(topic, keys, timeout)
+    if source == "crossref_recent":
+        return crossref_recent(topic, timeout)
     raise FetchError("adapter_not_implemented")
 
 

@@ -190,12 +190,22 @@ def refresh(store, explicit_topics=None, sources=None, budget=None, sector_batch
         ttl = source_freshness(cfg, source, spec)
         if source == "google_trends_rss":
             topics = cfg.get("countries", ["KR"])[:3]
-        elif source in ("github_new", "hackernews"):
+        elif source in ("github_new", "hackernews", "crossref_recent"):
             globals_ = cfg.get("global_queries", ["robotics", "healthcare"])
             offset = store.db.execute("SELECT COUNT(*) FROM fetches WHERE source=?", (source,)).fetchone()[0] % max(len(globals_), 1)
             topics = (globals_[offset:] + globals_[:offset])[:2]
         elif source == "bizinfo":
             topics = ["지원사업"]
+        elif source == "kosis":
+            series = cfg.get("kosis_series", [])
+            required = ("label", "userStatsId", "prdSe", "definition", "population", "normalization")
+            if not isinstance(series, list) or len(series) > 12 or any(
+                    not isinstance(item, dict) or any(not isinstance(item.get(field), str) or not item[field].strip()
+                                                      for field in required) for item in series):
+                raise ValueError("kosis_series: 정의가 포함된 등록 통계표 최대 12개가 필요합니다.")
+            topics = [json.dumps(item, ensure_ascii=False, sort_keys=True, separators=(",", ":")) for item in series]
+            if not topics:
+                unavailable.append({"source": source, "status": "no_registered_series_configured", "missing_keys": []})
         elif source == "youtube":
             # An empty watchlist must not silently disable YouTube in radar mode.
             # One bounded search rotates across this cycle's actual field queries.

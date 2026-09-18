@@ -51,7 +51,7 @@ v0.5.0에서는 기본 `blue-ocean prepare/run`에 실제 허용 소스 갱신�
 
 - 400분야·3,559세부항목·89압축 분류와 사용자 요구 원문/해시 보존.
 - 기존 조사 177개 저장소 메타데이터. 모든 저장소의 코드 실행·법적 사용권·사업성 검증이 아님.
-- GitHub 신규 저장소, Hacker News, Google Trending KR RSS, Google News RSS의 live 수집 성공 이력.
+- GitHub 신규 저장소, Hacker News, Google Trending KR RSS, Google News RSS의 live 수집 성공 이력. Crossref 최근 등록 논문 메타데이터 커넥터도 2026-09-18 제한된 실제 응답과 fixture를 검증한 뒤 새 설치 기본 소스에 포함했다.
 - 28일 원천 메타데이터·집계 관측 보관, 출처 TTL·예산·부분 실패·중복·revision·forecast/resolution.
 
 ## 아직 남은 것
@@ -59,7 +59,7 @@ v0.5.0에서는 기본 `blue-ocean prepare/run`에 실제 허용 소스 갱신�
 - NAVER: 이전 인증 401, 사용자가 보류. 이번에도 비활성 유지하며 자동 재시도하지 않았다.
 - YouTube 검색/집계: 구축 사용자 상태에서는 live 수집 검증. 새 설치/사용자는 별도 키와 현재 인증 확인 필요. 기업마당은 아직 fixture 검증만 완료.
 - Instagram/TikTok/X/Reddit/Google Trends 전체 API/투자/특허/채용/거래 등: 플랫폼별 권한·이용조건·어댑터·검증 필요.
-- K-Startup/KOSIS/ECOS: 공식 원문 조사/허용 내보내기로 보완; 전용 수집 어댑터 미구현.
+- K-Startup/ECOS: 공식 원문 조사/허용 내보내기로 보완하며 전용 수집 어댑터 미구현. KOSIS는 등록 통계표 제한 어댑터·fixture가 있으나 사용자 키/표 설정과 live 검증이 필요하다.
 - 전 분야 심층 숙련, 실제 고객·매출 실험, 장기 예측 평가, 선정·수상 성과는 미검증.
 - gstack 전체 코드·생산성 주장을 검증하거나 제3자 설치 훅을 실행하지 않았다. 자체 모델 훈련·외부 LLM 실행기도 구현하지 않았다.
 - 사용자의 현재 요청으로 외부 서버·LLM API·텔레그램 추가 작업은 보류했다. 플러그인 개선에 집중하며 기존 예약/수신 설정은 변경하지 않았다.

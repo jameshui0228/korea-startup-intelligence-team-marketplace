@@ -1,6 +1,6 @@
 # 데이터 연결
 
-공식 규격 확인일: 2026-09-17. 소스별 변경 가능성은 `assets/sources.json`의 verified_at와 docs로 재검토한다.
+공식 규격 확인일: 2026-09-18. 소스별 변경 가능성은 `assets/sources.json`의 verified_at와 docs로 재검토한다.
 문서 확인, 구현, 키 존재, 실제 인증 성공, 실제 데이터 획득, 내용 검토는 각각 다른 상태다.
 `doctor`의 last_attempt와 보고서 sources를 기준으로 말한다. 실제 새 데이터가 없는 성공 응답도 가능하다.
 
@@ -8,6 +8,7 @@
 
 - GitHub REST 신규 저장소: 최근 90일 생성·현재 별 정렬, 한 쿼리 10개. 현재 별은 증가 속도가 아니다.
 - Hacker News Algolia: 최근 14일 게시물 검색, 한 쿼리 10개. 개발자/영어권 편향을 명시한다.
+- Crossref REST: 제목 쿼리에 맞는 최근 14일 **메타데이터 등록** 최대 10개. 2026-09-18 제한된 실제 응답과 fixture를 검증했다. 등록일은 논문 발행일이 아니며 논문·인용은 고객 수요나 기술 유효성의 증명이 아니다.
 - Google Trending Now RSS: KR 기본. JP/US/SG/GB/IN 추가 가능. 뉴스 연계 급등어만 포함하며 전체 소비 검색이 아니다.
 - Google News RSS: 최대 20개 제목·링크. 비공식 안정성 보장이 없는 best-effort 피드라 변경/장애를 보고한다.
 
@@ -36,6 +37,7 @@ NAVER_HUB_CLIENT_ID
 NAVER_HUB_CLIENT_SECRET
 YOUTUBE_API_KEY
 BIZINFO_API_KEY
+KOSIS_API_KEY
 ```
 
 예: `enable naver_news`, `enable naver_trend`로 기본 수집 소스를 활성화한 뒤,
@@ -52,6 +54,8 @@ TLS 검증은 끄지 않는다. Python에 CA가 없으면 시스템 CA 번들을
   [statistics 정의](https://developers.google.com/youtube/v3/docs/videos#statistics)에 기재된 2026-08-24 조회 정의 변경을 별도 지표 이름에 보존한다.
   자동재생 등을 포함한 재생 시작 수는 순 시청자·한국 사용자·구매 수가 아니며 변경 전 정의와 이어 붙이지 않는다.
 - 기업마당: 인증키를 사용한 공고 최대 30건 첫 페이지. 전체 공고나 자동 자격판정은 아니다.
+- KOSIS: 인증키와 `config.json`의 `kosis_series`에 사용자가 등록한 통계표를 지정한 경우 최신 1~12개 시점만 조회한다.
+  정의·단위·모집단·기간·정규화·공표판본을 함께 보존하며, KOSIS 전체를 검색하거나 검색 주제를 자동으로 통계표에 대응시키지 않는다.
 
 구축 사용자 상태에서는 2026-09-17 YouTube 검색과 집계의 실제 응답을 확인했다. 이는 다른 사용자의 연결까지 보증하지 않는다.
 기업마당은 fixture 테스트와 공식 스키마 검토 범위다. 현재 상태는 사용자별 doctor/last_attempt로 확인한다.
@@ -68,7 +72,7 @@ YouTube 연결을 사용자가 요청하고 YOUTUBE_API_KEY를 입력한 뒤에�
 | 1 | 콘텐츠 신호의 시간 변화 | Google Cloud YouTube Data API v3의 YOUTUBE_API_KEY | 검색/집계 코드·fixture 및 구축 사용자 live 검증; 현재 연결은 doctor 확인 |
 | 2 | 한국 지원 공고 갱신 | 기업마당 BIZINFO_API_KEY | 수집 코드·fixture 검증, 실제 키 미검증 |
 | 3 | 창업 전문 공고 범위 확대 | [공식 K-Startup 조회서비스](https://www.data.go.kr/data/15125364/openapi.do) 신청·상세 명세 | 공식 데이터셋 확인, 어댑터 미구현 |
-| 4 | 대표성 있는 업종 분모 | KOSIS/ECOS의 필요한 표·기준시점·사용 권한 | 표 선정·어댑터 작업 필요 |
+| 4 | 대표성 있는 업종 분모 | KOSIS/ECOS의 필요한 표·기준시점·사용 권한 | KOSIS 등록 통계표 어댑터·fixture 구현; 키/표 설정 및 live 검증 필요, ECOS 미구현 |
 | 5 | 사회적 확산·거래 확인 | 플랫폼별 승인 범위 또는 허용된 비식별 내보내기 | Instagram/TikTok/커머스 전체 미연결 |
 
 API 수를 늘리는 것보다 해당 후보의 가장 중요한 미지수를 해결할 데이터부터 요청한다. 원치 않는 서비스 가입·결제·권한 확대는 하지 않는다.
@@ -81,7 +85,7 @@ API 수를 늘리는 것보다 해당 후보의 가장 중요한 미지수를 �
 - TikTok/X/Threads/Reddit/Discord 및 국내 로그인 커뮤니티: 플랫폼별 계약·상업적 이용·범위·비용 확인 전 자동 연결하지 않는다.
 - Product Hunt: API 사용 허가/상업적 조건 확인 후 구현한다.
 - K-Startup 공식 API 데이터셋은 확인했지만 adapter는 미구현. 기업마당과 구분한다.
-- KOSIS·ECOS·KIPRIS·채용·앱스토어·크라우드펀딩·투자·커머스: 공식 브라우징 또는 허용된 내보내기 자료로 시작한다.
+- ECOS·KIPRIS·채용·앱스토어·크라우드펀딩·투자·커머스: 공식 브라우징 또는 허용된 내보내기 자료로 시작한다.
   주요 표/분모/빈티지/매출 정의·권한이 확정된 다음 작은 adapter와 테스트를 추가한다.
 
 이 소스들이 sources.json에 등록됐다는 이유만으로 연결됐다고 말하지 않는다.
