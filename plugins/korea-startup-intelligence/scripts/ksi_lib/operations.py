@@ -148,13 +148,19 @@ def health(store, acknowledge=False):
     unfinished = store.db.execute("SELECT COUNT(*) FROM radar_runs WHERE state IN ('prepared','reviewing') AND started_at<?", (stamp(overdue),)).fetchone()[0]
     if unfinished:
         issues.append("unfinished_research_cycle")
-    if cfg["scheduler"].get("status") == "ACTIVE":
+    scheduler_status = cfg["scheduler"].get("status", "not_configured")
+    if scheduler_status == "ACTIVE":
         if not heartbeat:
             issues.append("no_recorded_heartbeat_run")
         elif parse_date(heartbeat["started_at"]) < overdue:
             issues.append("heartbeat_receipt_overdue")
         elif heartbeat["state"] == "failed":
             issues.append("latest_heartbeat_failed")
+    elif scheduler_status not in ("not_configured", None):
+        # A stale local registration must never be interpreted as a working
+        # scheduler. Preserve the reported state so a user can distinguish a
+        # deliberately unconfigured workspace from a deleted/paused job.
+        issues.append("scheduler_not_active:" + str(scheduler_status).lower())
     signature = digest(sorted(issues))
     path = store.workspace / "reports/radar-health-ack.json"
     previous = json.loads(path.read_text()) if path.exists() else None

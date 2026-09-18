@@ -402,6 +402,15 @@ class TelegramOperationsTest(unittest.TestCase):
         self.assertIn("no_recorded_heartbeat_run", health["issues"])
         self.assertIsNone(health["latest_recorded_heartbeat"])
 
+    def test_missing_scheduler_registration_is_reported_as_attention(self):
+        cfg = radar.ensure_radar(self.store)
+        cfg["scheduler"] = {"status": "MISSING", "automation_id": "deleted-fixture"}
+        atomic_json(self.workspace / "radar.json", cfg)
+        health = operations.health(self.store)
+        self.assertEqual(health["status"], "attention")
+        self.assertIn("scheduler_not_active:missing", health["issues"])
+        self.assertNotIn("no_recorded_heartbeat_run", health["issues"])
+
 
 if __name__ == "__main__":
     unittest.main()
