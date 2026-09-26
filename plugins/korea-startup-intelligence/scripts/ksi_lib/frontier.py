@@ -6,7 +6,6 @@ pretending that novelty is customer demand or startup success.
 """
 from __future__ import annotations
 
-import json
 import re
 import unicodedata
 from collections import Counter
@@ -15,6 +14,7 @@ from datetime import timedelta
 from .engine import choose_domains
 from .model import CHANGE_KINDS, assets, clean, digest, now, parse_date, stamp
 from .venture_intelligence import SOURCE_LANES
+from . import claim_ledger
 
 
 ARCHETYPES = (
@@ -105,6 +105,11 @@ REQUIRED_FIELDS = (
     "low_cost_probe", "first_users",
 )
 
+OPTIONAL_CANDIDATE_FIELDS = (
+    "problem", "payer", "current_alternative", "current_spend", "supply_gap", "claims",
+)
+EVALUATOR_VERSION = "claim-ledger-v1"
+
 
 def _tokens(value):
     value = unicodedata.normalize("NFKC", str(value or "")).lower()
@@ -126,28 +131,7 @@ def _similarity(left, right):
 
 
 def _reviewed(store):
-    exists = store.db.execute(
-        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='source_reviews'"
-    ).fetchone()
-    if not exists:
-        return {}
-    from .radar import evidence_signature
-    observations = {row["id"]: row for row in store.observations()}
-    current = now()
-    output = {}
-    for row in store.db.execute("SELECT evidence_id,evidence_hash,reviewed_at,data FROM source_reviews"):
-        source = observations.get(row["evidence_id"])
-        review_date = parse_date(row["reviewed_at"])
-        if not source or row["evidence_hash"] != evidence_signature(source) or not review_date or \
-                not timedelta(0) <= current - review_date <= timedelta(days=14):
-            continue
-        try:
-            data = json.loads(row["data"])
-        except (TypeError, ValueError, json.JSONDecodeError):
-            continue
-        if data.get("read_scope") != "metadata_only":
-            output[row["evidence_id"]] = data
-    return output
+    return claim_ledger.current_reviews(store)
 
 
 def _lane(row):
@@ -363,27 +347,58 @@ def frontier_packet(store, topic=None, limit=30):
 
 
 def tournament_template():
+    customer = "특정 역할의 초기 고객"
+    problem = "그 고객이 특정 순간에 반복적으로 겪는 비용·불편"
+    payer = "문제 해결 결과에 실제로 예산을 배정하는 지불자"
+    alternative = "현재의 수작업·외주·미해결 상태와 전환을 막는 이유"
+    structural_change = "언제 무엇이 바뀌어 예전과 다른 행동이 가능해졌는지"
+    why_now = "날짜가 있는 최근 사건이 어떤 행동·비용을 언제부터 바꾸는지"
+    korea_wedge = "한국의 가격·규제·유통·행동 제약을 이용한 첫 진입점"
     return {
         "batch_key": "founder-chosen-stable-key",
         "topic": "이번 탐색의 고객 변화 또는 시장 주제",
         "candidates": [{
             "key": "stable-candidate-key", "title": "구체적 고객·순간·결과가 보이는 이름",
-            "customer": "특정 역할의 초기 고객", "trigger_moment": "문제가 발생하는 특정 순간",
-            "structural_change": "언제 무엇이 바뀌어 예전과 다른 행동이 가능해졌는지",
+            "customer": customer, "problem": problem, "payer": payer,
+            "current_alternative": alternative, "trigger_moment": "문제가 발생하는 특정 순간",
+            "structural_change": structural_change,
             "non_obvious_insight": "주류 설명과 다른 인과 메커니즘",
             "solution": "핵심 결과를 바꾸는 최소 제안", "business_structure": BUSINESS_STRUCTURES[0],
             "business_model": "누가 무엇을 기준으로 지불하는지",
             "incumbent_disadvantage": "기존 대기업·대안이 이 진입점을 회피하는 구조적 이유",
-            "korea_wedge": "한국의 가격·규제·유통·행동 제약을 이용한 첫 진입점",
-            "why_now": "날짜가 있는 최근 사건이 어떤 행동·비용을 언제부터 바꾸는지",
+            "korea_wedge": korea_wedge,
+            "why_now": why_now,
             "horizon_months": 12, "archetype": ARCHETYPES[0]["id"], "domain_ids": ["KR-001"],
             "evidence_ids": [], "counterevidence_ids": [], "assumptions": ["가장 위험한 가정"],
             "leading_indicator": "다음에 관측되어야 할 선행 행동",
             "falsifier": "무엇이 관측되면 틀렸다고 판정할지",
             "low_cost_probe": "제품 개발 전 가장 싼 관측·수동 실험",
             "first_users": "이번 달 접근 경로를 조사할 초기 고객",
+            "claims": {
+                "customer": {"statement": customer, "status": "UNKNOWN", "links": [],
+                              "uncertainty": "실제 역할과 접근 경로 미확인", "next_check": "이번 주 3명의 해당 역할을 확인"},
+                "problem": {"statement": problem, "status": "UNKNOWN", "links": [],
+                             "uncertainty": "반복 빈도와 현재 비용 미확인", "next_check": "같은 순간의 최근 행동·지출 원문 확인"},
+                "payer": {"statement": payer, "status": "UNKNOWN", "links": [],
+                          "uncertainty": "예산 소유자와 결제 단위 미확인", "next_check": "누가 현재 대안에 돈·시간을 쓰는지 확인"},
+                "current_alternative": {"statement": alternative, "status": "UNKNOWN", "links": [],
+                                         "uncertainty": "한국의 직접·간접 대안 미확인", "next_check": "현재 수작업·외주·미사용 대안 비교"},
+                "structural_change": {"statement": structural_change, "status": "UNKNOWN", "links": [],
+                                       "uncertainty": "변화의 원문과 시행 시점 미확인", "next_check": "원문·발행일·생산자 대조"},
+                "why_now": {"statement": why_now, "status": "UNKNOWN", "links": [],
+                            "uncertainty": "최근성·반복성 미확인", "next_check": "120일 내 독립 원문 2개 이상 확인"},
+                "korea_wedge": {"statement": korea_wedge, "status": "UNKNOWN", "links": [],
+                                "uncertainty": "한국 적용 범위 미확인", "next_check": "한국의 제약·현재 행동 원문 확인"},
+            },
         }],
         "note": "3~60개를 미리보기할 수 있지만 완전한 30→10→3 토너먼트는 최소 30개가 필요",
+        "claim_link_contract": {
+            "evidence_id": "후보에 연결한 실제 근거 ID", "relation": "supports|contradicts|context",
+            "basis": sorted(claim_ledger.BASES), "locator": "실제 읽은 원문의 절·문단·시각·표 위치",
+            "note": "이 위치가 이 주장을 지지/반박/맥락화하는 이유와 한계",
+            "rechecked": "기존 연결을 실제 재검토했을 때만 true; 저장 결과에는 남지 않는 입력 선언",
+        },
+        "revision_note": "기존 후보 수정은 frontier-claims의 candidate.expected_revision을 함께 제출; 동일 저장 재실행은 중복 생성하지 않음",
     }
 
 
@@ -417,36 +432,48 @@ def _concept(candidate):
     ))
 
 
-def _normalize_candidate(store, raw, known_observations, known_domains):
+def _normalize_candidate(store, raw, known_observations, known_domains, reviewed, existing=None):
     if not isinstance(raw, dict) or any(field not in raw for field in REQUIRED_FIELDS):
         missing = [field for field in REQUIRED_FIELDS if not isinstance(raw, dict) or field not in raw]
         raise ValueError("프런티어 후보 필드 누락: " + ", ".join(missing))
     candidate = {field: raw[field] for field in REQUIRED_FIELDS}
+    for field in OPTIONAL_CANDIDATE_FIELDS:
+        if field in raw:
+            candidate[field] = raw[field]
     candidate["title"] = _text(candidate["title"], "title", 8, 120)
     for field in ("customer", "trigger_moment", "solution", "business_model", "leading_indicator",
                   "falsifier", "low_cost_probe", "first_users"):
         candidate[field] = _text(candidate[field], field, 10)
     for field in ("structural_change", "non_obvious_insight", "incumbent_disadvantage", "korea_wedge", "why_now"):
         candidate[field] = _text(candidate[field], field, 20)
+    for field in ("problem", "payer", "current_alternative", "current_spend", "supply_gap"):
+        if field in candidate and candidate[field] is not None:
+            candidate[field] = _text(candidate[field], field, 10)
     if candidate["business_structure"] not in BUSINESS_STRUCTURES:
         raise ValueError("business_structure: 지원되는 사업 구조를 사용하세요.")
-    if candidate["archetype"] not in {item["id"] for item in ARCHETYPES}:
+    if not isinstance(candidate["archetype"], str) or candidate["archetype"] not in {item["id"] for item in ARCHETYPES}:
         raise ValueError("archetype: 지원되는 프런티어 원리를 사용하세요.")
     if type(candidate["horizon_months"]) is not int or not 1 <= candidate["horizon_months"] <= 60:
         raise ValueError("horizon_months: 1~60 정수가 필요합니다.")
     candidate["domain_ids"] = _string_list(candidate["domain_ids"], "domain_ids", 1, 5)
     if set(candidate["domain_ids"]) - known_domains:
         raise ValueError("알 수 없는 domain_ids가 있습니다.")
-    for field in ("evidence_ids", "counterevidence_ids"):
-        candidate[field] = _string_list(candidate[field], field, 0, 20)
-        if set(candidate[field]) - set(known_observations):
-            raise ValueError(f"{field}: 현재 유효한 근거 ID만 연결하세요.")
-    candidate["assumptions"] = _string_list(candidate["assumptions"], "assumptions", 1, 8)
     key = raw.get("key")
     if key is not None and (not isinstance(key, str) or not re.fullmatch(r"[a-z0-9][a-z0-9-]{2,79}", key)):
         raise ValueError("key: 영문 소문자·숫자·하이픈 3~80자가 필요합니다.")
     candidate["key"] = key or "hypothesis-" + digest(candidate["title"])[:16]
     candidate["id"] = "frontier-" + candidate["key"]
+    previous = (existing or {}).get(candidate["id"])
+    for field in ("evidence_ids", "counterevidence_ids"):
+        candidate[field] = _string_list(candidate[field], field, 0, 20)
+        historical = set((previous or {}).get(field, []))
+        if set(candidate[field]) - (set(known_observations) | historical):
+            raise ValueError(f"{field}: 새 근거는 현재 유효한 ID만 연결하세요. 과거 ID는 기록 보존용입니다.")
+    candidate["assumptions"] = _string_list(candidate["assumptions"], "assumptions", 1, 8)
+    candidate["claims"] = claim_ledger.normalize_claims(
+        candidate.get("claims"), candidate, known_observations, reviewed,
+        previous=previous
+    )
     return candidate
 
 
@@ -467,7 +494,11 @@ def _evaluate_one(candidate, observations, reviewed, comparison_texts):
         "korea_specific_wedge": korea_specific,
         "specific_value_capture": model_specific,
     }
-    linked = [observations[evidence_id] for evidence_id in candidate["evidence_ids"]]
+    claim_report = claim_ledger.assess_claims(candidate, observations, reviewed)
+    attached = set(candidate["evidence_ids"]) | set(candidate["counterevidence_ids"])
+    # Unbound/context/assumed/contradicted links do not contribute to positive
+    # evidence or trend scores. A fresh but unrelated article earns no points.
+    linked = [observations[eid] for eid in claim_ledger.claim_evidence_ids(claim_report)]
     substantive = [row for row in linked if row["id"] in reviewed]
     origins = {reviewed[row["id"]].get("origin_group") or row.get("publisher") or row.get("url")
                for row in substantive}
@@ -477,10 +508,17 @@ def _evaluate_one(candidate, observations, reviewed, comparison_texts):
         "has_reviewed_original": bool(substantive),
         "independent_origins": len(origins) >= 2,
         "cross_lane": len(lanes) >= 2,
-        "counterevidence_linked": bool(candidate["counterevidence_ids"]),
+        "customer_and_problem_supported": {"customer", "problem"} <= set(claim_report["supported_core"]),
+        "counterevidence_examined": any(
+            link["valid"] and link["evidence_id"] in candidate["counterevidence_ids"]
+            for claim in claim_report["claims"].values() for link in claim["links"]
+            if link["relation"] in {"contradicts", "context"}
+        ),
     }
     current = now()
-    dated = [(row, parse_date(row.get("event_at"))) for row in linked]
+    change_sources = [observations[eid] for eid in claim_ledger.claim_evidence_ids(
+        claim_report, claim_ledger.CHANGE_FIELDS)]
+    dated = [(row, parse_date(row.get("event_at"))) for row in change_sources]
     recent = [row for row, date in dated if date is not None
               and timedelta(0) <= current - date <= timedelta(days=120)]
     reviewed_recent = [row for row in recent if row["id"] in reviewed]
@@ -512,6 +550,10 @@ def _evaluate_one(candidate, observations, reviewed, comparison_texts):
     evidence_strength = sum(evidence.values())
     trend_relevance = sum(trend.values())
     execution_clarity = sum(execution.values())
+    claim_strong = (set(claim_ledger.CORE_FIELDS) <= set(claim_report["supported_core"]) and
+                    not claim_report["blocking"])
+    claim_emerging = ({"customer", "problem", *claim_ledger.CHANGE_FIELDS} <=
+                      set(claim_report["supported_core"]) and not claim_report["blocking"])
     hard_generic = len(hits) >= 2 or max_similarity >= 0.86
     if hard_generic:
         tier = "reject_generic"
@@ -520,9 +562,9 @@ def _evaluate_one(candidate, observations, reviewed, comparison_texts):
     elif novelty_strength < 4:
         tier = "needs_rework"
     elif (novelty_strength >= 5 and evidence_strength >= 4 and trend_relevance >= 5
-          and execution_clarity >= 4):
+          and execution_clarity >= 4 and claim_strong):
         tier = "executable_candidate"
-    elif novelty_strength >= 4 and evidence_strength >= 2 and trend["reviewed_recent_original_120d"]:
+    elif novelty_strength >= 4 and evidence_strength >= 2 and trend["reviewed_recent_original_120d"] and claim_emerging:
         tier = "emerging_candidate"
     else:
         tier = "frontier_hypothesis"
@@ -531,19 +573,32 @@ def _evaluate_one(candidate, observations, reviewed, comparison_texts):
         warnings.append("generic_solution_language:" + str(len(hits)))
     if max_similarity >= 0.62:
         warnings.append("conceptually_close_to:" + str(nearest))
-    if not linked:
+    if not attached:
         warnings.append("no_source_evidence_frontier_only")
-    if linked and not evidence["has_reviewed_original"]:
+    if attached and not any(eid in reviewed for eid in attached):
         warnings.append("linked_sources_not_original_text_reviewed")
-    if linked and not trend["reviewed_recent_original_120d"]:
+    if attached and not linked:
+        warnings.append("no_claim_scoped_support")
+    if attached and not trend["reviewed_recent_original_120d"]:
         warnings.append("no_reviewed_recent_original_120d")
     if reviewed_recent and len(recent_origins) < 2:
         warnings.append("recent_signal_single_origin")
     warnings.append("mainstream_lead_time_not_measured")
-    if not candidate["counterevidence_ids"]:
-        warnings.append("counterevidence_missing")
+    if not claim_ledger.claim_evidence_ids(claim_report, relation="contradicts"):
+        warnings.append("no_current_claim_linked_counterevidence")
+    if not claim_report["configured"]:
+        warnings.append("claim_ledger_missing_strong_tiers_blocked")
+    for field in claim_report["blocking"]:
+        warnings.append("claim_requires_review:" + field)
+    for item in claim_report["stale"]:
+        warnings.append("claim_evidence_stale:" + item)
+    for field in claim_report["basis_gaps"]:
+        warnings.append("claim_basis_not_fit:" + field)
     return {
         "candidate_id": candidate["id"], "title": candidate["title"], "tier": tier,
+        "evaluator_version": EVALUATOR_VERSION,
+        "source_counts": {"attached": len(attached), "claim_support": len(linked),
+                          "change_claim_support": len(change_sources)},
         "decision_vector": {
             "novelty_strength": novelty_strength,
             "evidence_strength": evidence_strength,
@@ -555,6 +610,7 @@ def _evaluate_one(candidate, observations, reviewed, comparison_texts):
         "latest_linked_event_at": max((stamp(date) for _, date in dated if date is not None), default=None),
         "execution_dimensions": execution, "max_similarity": round(max_similarity, 3),
         "nearest_candidate_id": nearest, "generic_phrase_hits": len(hits), "warnings": warnings,
+        "claim_ledger": claim_report,
         "boundary": "참신성·시의성·근거·실행 명확성 비교이며 성공확률이나 트렌드 선행성 증명이 아닙니다.",
     }
 
@@ -580,14 +636,17 @@ def evaluate_tournament(store, payload, apply=False):
         raise ValueError("tournament 후보는 3~60개이어야 합니다.")
     known_observations = {row["id"]: row for row in store.observations()}
     known_domains = {row["id"] for row in assets("taxonomy.json")["domains"]}
-    candidates = [_normalize_candidate(store, row, known_observations, known_domains)
+    reviewed = _reviewed(store)
+    existing = {row.get("id"): row for row in store.records("frontier_hypothesis")}
+    candidates = [_normalize_candidate(store, row, known_observations, known_domains, reviewed, existing=existing)
                   for row in payload["candidates"]]
     ids = [row["id"] for row in candidates]
     if len(ids) != len(set(ids)):
         raise ValueError("한 토너먼트 안에 중복 candidate key가 있습니다.")
+    # Compare against this batch's new versions, not both old and new texts of
+    # the same peers (which would make a replay alter similarity and ranking).
     comparison = [(row["id"], _concept(row)) for row in
-                  store.records("blue_ocean") + store.records("frontier_hypothesis")]
-    reviewed = _reviewed(store)
+                  store.records("blue_ocean") + list(existing.values()) if row["id"] not in ids]
     evaluations = []
     for candidate in candidates:
         peers = [(record_id, text) for record_id, text in comparison if record_id != candidate["id"]]
@@ -658,17 +717,31 @@ def evaluate_tournament(store, payload, apply=False):
         if not isinstance(batch_key, str) or not re.fullmatch(r"[a-z0-9][a-z0-9-]{2,79}", batch_key):
             raise ValueError("--apply에는 영문 소문자·숫자·하이픈 batch_key가 필요합니다.")
         batch_id = "frontier-batch-" + batch_key + "-" + digest({
-            "candidates": candidates, "topic": payload.get("topic")
+            "candidates": candidates, "topic": payload.get("topic"), "evaluations": evaluations
         })[:12]
         recorded_at = stamp()
         batch = {"id": batch_id, "batch_key": batch_key, "topic": clean(payload.get("topic"), 200),
                  "candidate_ids": ids, "shortlist": shortlist, "evaluations": evaluations,
+                 "candidates": candidates, "evaluator_version": EVALUATOR_VERSION,
                  "diversity": result["diversity"], "recorded_at": recorded_at,
                  "boundary": result["boundary"]}
         with store.db:
-            store.record("frontier_batch", batch)
-            for candidate in candidates:
-                store.record("frontier_hypothesis", {
+            if not store.db.in_transaction:
+                store.db.execute("BEGIN IMMEDIATE")
+            revisions, changed = {}, []
+            live = {row["id"]: row for row in store.records("frontier_hypothesis")}
+            for candidate, raw in zip(candidates, payload["candidates"]):
+                prior = live.get(candidate["id"])
+                if prior and all(prior.get(field) == value for field, value in candidate.items()) and \
+                        prior.get("evaluation") == evaluation_by_id[candidate["id"]]:
+                    continue
+                if prior or "expected_revision" in raw:
+                    store.assert_revision("frontier_hypothesis", candidate["id"], raw.get("expected_revision"))
+                changed.append(candidate)
+            if not any(row["id"] == batch_id for row in store.records("frontier_batch")):
+                store.record("frontier_batch", batch)
+            for candidate in changed:
+                revisions[candidate["id"]] = store.record("frontier_hypothesis", {
                     **candidate, "evaluation": evaluation_by_id[candidate["id"]],
                     "source_batch_id": batch_id, "recorded_at": recorded_at,
                     "status": "exploration_not_validated",
@@ -676,13 +749,74 @@ def evaluate_tournament(store, payload, apply=False):
         result["saved"] = True
         result["batch_id"] = batch_id
         result["saved_hypotheses"] = len(candidates)
+        result["changed_hypotheses"] = len(changed)
+        result["revisions"] = revisions
     return result
+
+
+def _evaluation_change(recorded, current):
+    claim_changes = []
+    old_claims = (recorded.get("claim_ledger") or {}).get("claims", {})
+    new_claims = current["claim_ledger"]["claims"]
+    for field in sorted(set(old_claims) | set(new_claims)):
+        old, new = old_claims.get(field, {}), new_claims.get(field, {})
+        if old != new:
+            claim_changes.append({"claim": field,
+                                  "from": old.get("derived_status", "MISSING"),
+                                  "to": new.get("derived_status", "MISSING"),
+                                  "current_link_issues": sorted({link["reason"] for link in new.get("links", [])
+                                                                 if link.get("reason")})})
+    return {
+        "from_tier": recorded.get("tier"), "to_tier": current["tier"],
+        "evaluator_changed": recorded.get("evaluator_version") != current["evaluator_version"],
+        "tier_changed": recorded.get("tier") != current["tier"],
+        "decision_vector_changed": recorded.get("decision_vector") != current["decision_vector"],
+        "claim_changes": claim_changes,
+        "new_warnings": sorted(set(current["warnings"]) - set(recorded.get("warnings", []))),
+        "resolved_warnings": sorted(set(recorded.get("warnings", [])) - set(current["warnings"])),
+        "boundary": "평가기준·원문 검토·비교 후보 변화에 의한 재평가입니다. 사업 성과 개선이 아닙니다.",
+    }
 
 
 def saved_hypotheses(store):
     rows = store.records("frontier_hypothesis")
+    observations = {row["id"]: row for row in store.observations()}
+    reviewed = _reviewed(store)
+    comparison = [(row["id"], _concept(row)) for row in
+                  store.records("blue_ocean") + rows]
+    items = []
+    for row in rows:
+        peers = [(record_id, text) for record_id, text in comparison if record_id != row["id"]]
+        current = _evaluate_one(row, observations, reviewed, peers)
+        recorded = row.get("evaluation") or {}
+        changed = _evaluation_change(recorded, current)
+        items.append({**row, "current_evaluation": current, "evaluation_change": changed})
     return {
-        "items": rows,
-        "count": len(rows),
-        "boundary": "저장된 탐색 가설이며 blue-ocean 후보·고객 수요·사업 검증이 아닙니다.",
+        "items": items,
+        "count": len(items),
+        "changed_since_save": sum(any(value for key, value in change.items()
+                                      if key in {"evaluator_changed", "tier_changed", "decision_vector_changed",
+                                                 "claim_changes", "new_warnings", "resolved_warnings"})
+                                  for change in (item["evaluation_change"] for item in items)),
+        "boundary": "저장된 탐색 가설을 현재 원문·주장 장부로 다시 읽은 결과이며 blue-ocean 후보·고객 수요·사업 검증이 아닙니다.",
     }
+
+
+def claim_report(store, candidate_id):
+    """Inspect one candidate's claim ledger and current downgrade reasons."""
+    rows = store.records("frontier_hypothesis")
+    candidate = next((row for row in rows if row.get("id") == candidate_id or
+                      row.get("key") == candidate_id), None)
+    if not candidate:
+        raise ValueError("프런티어 후보를 찾을 수 없습니다.")
+    observations = {row["id"]: row for row in store.observations()}
+    reviewed = _reviewed(store)
+    peers = [(row["id"], _concept(row)) for row in rows + store.records("blue_ocean")
+             if row.get("id") != candidate.get("id")]
+    evaluation = _evaluate_one(candidate, observations, reviewed, peers)
+    revision = store.db.execute("SELECT revision FROM records WHERE kind='frontier_hypothesis' AND id=?",
+                                (candidate["id"],)).fetchone()[0]
+    return {"candidate": {**candidate, "expected_revision": revision}, "current_evaluation": evaluation,
+            "evaluation_change": _evaluation_change(candidate.get("evaluation") or {}, evaluation),
+            "claim_ledger": evaluation.get("claim_ledger"),
+            "boundary": "주장별 근거의 현재 유효성·반례·다음 확인을 보여주는 읽기 전용 진단입니다."}

@@ -140,7 +140,7 @@ def read_only_command(args):
     if args.command == "blue-ocean":
         return args.action in {"template", "status", "next", "history", "signals", "patterns", "lag",
                                "transfers", "portfolio", "design", "sources", "metrics", "search", "catch-up",
-                               "frontier", "frontier-template", "frontier-list"} or \
+                               "frontier", "frontier-template", "frontier-list", "frontier-claims"} or \
                (args.action == "bootstrap" and not args.apply) or \
                (args.action == "tournament" and not args.apply)
     if args.command == "operator":
@@ -222,6 +222,8 @@ def run(args):
             return frontier.tournament_template()
         if args.command == "blue-ocean" and args.action == "frontier-list":
             return frontier.saved_hypotheses(store)
+        if args.command == "blue-ocean" and args.action == "frontier-claims":
+            return frontier.claim_report(store, args.id)
         if args.command == "blue-ocean" and args.action == "tournament" and not args.apply:
             return frontier.evaluate_tournament(store, json.loads(Path(args.file).read_text()), apply=False)
         if args.command == "blue-ocean" and args.action == "bootstrap" and not args.apply:
@@ -571,6 +573,8 @@ def main():
     r.add_argument("--file", required=True)
     r.add_argument("--apply", action="store_true", help="Save all hypotheses and rejects as an immutable learning denominator")
     actions.add_parser("frontier-list", help="List saved exploration hypotheses; these are not validated opportunities")
+    r = actions.add_parser("frontier-claims", help="Show one saved hypothesis claim ledger and current evidence changes")
+    r.add_argument("--id", required=True)
     r = actions.add_parser("bootstrap", help="Make progress before any experiment result exists")
     r.add_argument("--id", help="Candidate id or key; omit for a learning-priority portfolio")
     r.add_argument("--limit", type=int, default=5)

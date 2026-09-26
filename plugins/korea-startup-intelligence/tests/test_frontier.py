@@ -138,6 +138,33 @@ class FrontierDiscoveryTest(unittest.TestCase):
         self.assertEqual(len(self.store.records("frontier_hypothesis")), 3)
         self.assertEqual(len(self.store.records("frontier_batch")), 1)
         self.assertEqual(frontier.saved_hypotheses(self.store)["count"], 3)
+        inspected = subprocess.run([
+            sys.executable, str(ROOT / "scripts" / "ksi.py"), "--workspace", str(self.workspace),
+            "blue-ocean", "frontier-claims", "--id", "frontier-parts-one",
+        ], capture_output=True, text=True)
+        self.assertEqual(inspected.returncode, 0, inspected.stderr)
+        inspected_json = json.loads(inspected.stdout)
+        self.assertEqual(inspected_json["candidate"]["expected_revision"], 1)
+        self.assertIn("claim_ledger", inspected_json)
+        replay = frontier.evaluate_tournament(self.store, {
+            "batch_key": "saved-frontier", "topic": "산업 장비 수명 연장", "candidates": rows,
+        }, apply=True)
+        self.assertEqual(replay["batch_id"], result["batch_id"])
+        self.assertEqual(replay["changed_hypotheses"], 0)
+        self.assertEqual(len(self.store.records("frontier_batch")), 1)
+        edited = [dict(row) for row in rows]
+        edited[0]["leading_indicator"] = "동일 장비군에서 서로 다른 제조사 부품의 긴급 구매 문의가 두 달 연속 반복된다."
+        with self.assertRaisesRegex(ValueError, "편집 충돌"):
+            frontier.evaluate_tournament(self.store, {
+                "batch_key": "saved-frontier", "topic": "산업 장비 수명 연장", "candidates": edited,
+            }, apply=True)
+        self.assertEqual(len(self.store.records("frontier_batch")), 1)
+        edited[0]["expected_revision"] = 1
+        changed = frontier.evaluate_tournament(self.store, {
+            "batch_key": "saved-frontier", "topic": "산업 장비 수명 연장", "candidates": edited,
+        }, apply=True)
+        self.assertEqual(changed["changed_hypotheses"], 1)
+        self.assertEqual(changed["revisions"]["frontier-parts-one"], 2)
 
     def test_old_signal_does_not_become_current_trend_from_review_alone(self):
         old = observation("manual", "regulation", "설비 전환", "오래된 설비 교체 고시",
@@ -208,6 +235,150 @@ class FrontierDiscoveryTest(unittest.TestCase):
         ], capture_output=True, text=True)
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertEqual(len(json.loads(completed.stdout)["generation_prompts"]), 30)
+
+    def test_claim_ledger_requires_claim_fit_and_blocks_provider_payer_proof(self):
+        interview = observation(
+            "manual", "interview", "산업 장비 부품", "설비 담당자 인터뷰 기록",
+            "https://example.com/interview-parts", stamp(now() - timedelta(days=3)),
+            collection_basis="user_owned", content_scope="full_text", origin_key="interview-one",
+            domain_ids=["KR-047"], speaker_role="customer",
+        )
+        with self.store.db:
+            self.store.put_observation(interview)
+        radar.review_source(self.store, {
+            "evidence_id": interview["id"], "read_scope": "full_text", "family": "customer",
+            "summary": "시험용 인터뷰 원본에서 담당 역할·탐색 행동·예산 소유자 발화를 확인했다.",
+            "origin_group": "interview-one", "origin_note": "비식별 인터뷰 원본",
+            "reviewer": "test", "collection_basis": "user_owned", "limitations": ["테스트 전용 사례"],
+        })
+        candidate = self.candidate(
+            "ledger-parts", "KR-047", "reverse_trend", "verification_service",
+            "단종 장비 부품의 납기 책임 검증", "노후 장비를 유지하는 중소 제조사의 설비 보전 담당자",
+            "수리 규칙과 부품 정보 공개가 넓어져 이종 장비의 호환 조사 비용이 낮아진다.",
+            "신제품이 늘수록 단종 장비의 유지 책임이 지역 수리사에게 이동한다.")
+        candidate.update({
+            "problem": "단종 부품을 찾고 호환성을 확인하는 동안 생산 납기가 지연되는 반복 문제",
+            "payer": "납기 지연을 피하려는 제조사의 설비 유지보수 예산 담당자",
+            "current_alternative": "담당자가 여러 공급처를 수작업으로 확인하거나 제조사 지원을 기다린다.",
+        })
+        candidate["evidence_ids"] = [interview["id"], self.rows[1]["id"]]
+        candidate["counterevidence_ids"] = [self.rows[2]["id"]]
+        candidate["claims"] = {
+            "customer": {"statement": candidate["customer"], "status": "FACT", "links": [
+                {"evidence_id": interview["id"], "relation": "supports", "basis": "direct_customer",
+                 "locator": "인터뷰 2번째 답변", "note": "반복 탐색 담당자"}]},
+            "problem": {"statement": candidate["problem"], "status": "INFERENCE", "links": [
+                {"evidence_id": interview["id"], "relation": "supports", "basis": "observed_behavior",
+                 "locator": "인터뷰 3번째 답변", "note": "현재 수작업 소요"}]},
+            "payer": {"statement": candidate["payer"], "status": "INFERENCE", "links": [
+                {"evidence_id": interview["id"], "relation": "supports", "basis": "direct_customer",
+                 "locator": "인터뷰 5번째 답변", "note": "예산 책임자 확인 전 가설"}]},
+            "current_alternative": {"statement": candidate["current_alternative"], "status": "FACT", "links": [
+                {"evidence_id": interview["id"], "relation": "supports", "basis": "observed_behavior",
+                 "locator": "인터뷰 3번째 답변", "note": "현재 우회"}]},
+            "structural_change": {"statement": candidate["structural_change"], "status": "FACT", "links": [
+                {"evidence_id": self.rows[1]["id"], "relation": "supports", "basis": "official_rule",
+                 "locator": "개정 조항", "note": "수리·정보 제공 변경"}]},
+            "why_now": {"statement": candidate["why_now"], "status": "INFERENCE", "links": [
+                {"evidence_id": self.rows[1]["id"], "relation": "supports", "basis": "official_rule",
+                 "locator": "시행일", "note": "현재 시점 연결은 별도 확인"}]},
+        }
+        result = frontier.evaluate_tournament(self.store, {
+            "batch_key": "ledger-fit", "candidates": [candidate, {
+                **self.candidate("ledger-two", "KR-036", "capacity_market", "managed_service",
+                                  "유휴 수리 용량 예약", "지역 수리업체의 일정 담당자", candidate["structural_change"], candidate["non_obvious_insight"]),
+            }, {
+                **self.candidate("ledger-three", "KR-180", "coordination_failure", "distribution",
+                                  "부품 책임 인계", "중소 제조사 구매 담당자", candidate["structural_change"], candidate["non_obvious_insight"]),
+            }],
+        })
+        row = next(item for item in result["evaluations"] if item["candidate_id"] == "frontier-ledger-parts")
+        self.assertTrue(row["claim_ledger"]["configured"])
+        self.assertIn("payer", row["claim_ledger"]["supported_core"])
+        self.assertNotIn("claim_basis_not_fit:payer", row["warnings"])
+
+        assumed = dict(candidate)
+        assumed["key"] = "ledger-assumed"
+        assumed["claims"] = {name: {**claim, "status": "ASSUMPTION"}
+                             for name, claim in candidate["claims"].items()}
+        assumed_result = frontier.evaluate_tournament(self.store, {
+            "batch_key": "ledger-assumed", "candidates": [assumed,
+                {**self.candidate("assumed-two", "KR-036", "capacity_market", "managed_service",
+                                  "유휴 수리 용량 예약", "지역 수리업체의 일정 담당자", candidate["structural_change"], candidate["non_obvious_insight"])},
+                {**self.candidate("assumed-three", "KR-180", "coordination_failure", "distribution",
+                                  "부품 책임 인계", "중소 제조사 구매 담당자", candidate["structural_change"], candidate["non_obvious_insight"])},
+            ]})
+        assumed_row = next(item for item in assumed_result["evaluations"]
+                           if item["candidate_id"] == "frontier-ledger-assumed")
+        self.assertEqual(assumed_row["claim_ledger"]["claims"]["payer"]["derived_status"], "UNTESTED")
+        self.assertFalse(assumed_row["trend_dimensions"]["recent_signal_120d"])
+        self.assertEqual(assumed_row["source_counts"]["claim_support"], 0)
+        self.assertNotIn(assumed_row["tier"], {"emerging_candidate", "executable_candidate"})
+
+        provider = dict(candidate)
+        provider["key"] = "ledger-provider-payer"
+        provider["claims"] = dict(candidate["claims"])
+        provider["claims"]["payer"] = {"statement": candidate["payer"], "status": "FACT", "links": [
+            {"evidence_id": self.rows[1]["id"], "relation": "supports", "basis": "provider_claim",
+             "locator": "판매자 가격표", "note": "판매자 주장일 뿐 지불자 관찰 아님"}]}
+        provider_result = frontier.evaluate_tournament(self.store, {
+            "batch_key": "ledger-provider", "candidates": [provider, {
+                **self.candidate("provider-two", "KR-036", "capacity_market", "managed_service",
+                                  "유휴 수리 용량 예약", "지역 수리업체 일정 담당자", candidate["structural_change"], candidate["non_obvious_insight"]),
+            }, {
+                **self.candidate("provider-three", "KR-180", "coordination_failure", "distribution",
+                                  "부품 책임 인계", "중소 제조사 구매 담당자", candidate["structural_change"], candidate["non_obvious_insight"]),
+            }],
+        })
+        provider_row = next(item for item in provider_result["evaluations"]
+                            if item["candidate_id"] == "frontier-ledger-provider-payer")
+        self.assertIn("claim_basis_not_fit:payer", provider_row["warnings"])
+
+        misplaced_counter = dict(candidate)
+        misplaced_counter["key"] = "ledger-misplaced-counter"
+        misplaced_counter["claims"] = json.loads(json.dumps(candidate["claims"]))
+        misplaced_counter["claims"]["problem"]["links"] = [{
+            "evidence_id": self.rows[1]["id"], "relation": "contradicts", "basis": "official_rule",
+            "locator": "개정 조항", "note": "반례로 읽었지만 counterevidence 목록에는 없음",
+        }]
+        with self.assertRaisesRegex(ValueError, "counterevidence_ids"):
+            frontier.evaluate_tournament(self.store, {
+                "batch_key": "ledger-misplaced-counter", "candidates": [misplaced_counter, {
+                    **self.candidate("misplaced-two", "KR-036", "capacity_market", "managed_service",
+                                      "유휴 수리 용량 예약", "지역 수리업체 일정 담당자", candidate["structural_change"], candidate["non_obvious_insight"]),
+                }, {
+                    **self.candidate("misplaced-three", "KR-180", "coordination_failure", "distribution",
+                                      "부품 책임 인계", "중소 제조사 구매 담당자", candidate["structural_change"], candidate["non_obvious_insight"]),
+                }],
+            })
+
+    def test_saved_claims_surface_source_reinterpretation(self):
+        candidate = self.candidate(
+            "ledger-history", "KR-047", "reverse_trend", "verification_service",
+            "단종 부품 재공급 검증", "노후 장비를 유지하는 중소 제조사의 설비 담당자",
+            "수리 규칙과 부품 정보 공개가 넓어져 호환 조사 비용이 낮아진다.",
+            "신제품 공급이 늘수록 단종 장비 유지 책임이 지역 수리사에게 집중된다.")
+        candidate["claims"] = {"structural_change": {
+            "statement": candidate["structural_change"], "status": "FACT", "links": [{
+                "evidence_id": self.rows[1]["id"], "relation": "supports", "basis": "official_rule",
+                "locator": "개정 조항", "note": "처음 검토한 해석"}],
+        }}
+        payload = {"batch_key": "ledger-history", "candidates": [candidate,
+                   {**candidate, "key": "ledger-history-two", "title": "다른 부품 검증", "claims": {}},
+                   {**candidate, "key": "ledger-history-three", "title": "세 번째 부품 검증", "claims": {}}]}
+        frontier.evaluate_tournament(self.store, payload, apply=True)
+        radar.review_source(self.store, {
+            "evidence_id": self.rows[1]["id"], "read_scope": "full_text", "family": "policy",
+            "summary": "재검토 결과 적용 범위가 달라 고객 비용 변화는 확인되지 않았다.",
+            "origin_group": "regulator-one", "origin_note": "규제 원문 재검토", "reviewer": "test",
+            "collection_basis": "public_source_verified", "change_kind": "regulation",
+            "limitations": ["고객 행동 미확인"],
+        })
+        listed = frontier.saved_hypotheses(self.store)
+        item = next(row for row in listed["items"] if row["id"] == "frontier-ledger-history")
+        self.assertTrue(item["evaluation_change"]["new_warnings"])
+        self.assertIn("claim_evidence_stale:structural_change:" + self.rows[1]["id"],
+                      " ".join(item["current_evaluation"]["warnings"]))
 
 
 if __name__ == "__main__":
