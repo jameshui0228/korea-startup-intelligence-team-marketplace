@@ -13,7 +13,7 @@ from collections import Counter
 from datetime import timedelta
 
 from .engine import choose_domains
-from .model import assets, clean, digest, now, parse_date, stamp
+from .model import CHANGE_KINDS, assets, clean, digest, now, parse_date, stamp
 from .venture_intelligence import SOURCE_LANES
 
 
@@ -81,12 +81,13 @@ MECHANISM_BY_KIND = {
     "price_change": "원가·공급 제약 변화", "crowdfunding": "새 제품 선결제 신호",
     "review": "사용 후 반복 마찰", "comment": "고객 언어의 초기 문제", "customer_observation": "관찰된 고객 행동",
     "transaction": "거래·지불 행동", "aggregate_metric": "반복 이용 집계", "search_spike": "탐색 관심 변화",
+    "climate_event": "기후·환경 조건 변화", "policy_budget": "정책·예산 변경",
+    "supply_chain": "공급망·조달 경로 변화", "demand_shift": "수요 행동 변화",
+    "capacity_change": "가용 역량·처리능력 변화", "business_model_change": "사업모델·수익구조 변화",
     "repository": "개발 가능성·공급 확대", "paper": "연구 가능성 변화", "product": "새 공급 출현",
     "app": "새 디지털 공급", "article": "신호 후보; 원 사건 재확인 필요",
 }
-MECHANISM_KINDS = {"regulation", "standard", "job", "procurement_award", "price_change",
-                   "crowdfunding", "review", "comment", "customer_observation", "transaction",
-                   "aggregate_metric", "patent", "paper"}
+MECHANISM_KINDS = set(CHANGE_KINDS)
 
 GENERIC_PATTERNS = (
     r"\bAI\s*(기반|활용)?\s*(통합)?\s*(플랫폼|앱|서비스|솔루션)\b",
@@ -153,8 +154,27 @@ def _lane(row):
     return SOURCE_LANES.get(row.get("source"), row.get("source") or "unknown")
 
 
-def _mechanism(row):
-    return MECHANISM_BY_KIND.get(row.get("kind"), "변화 원인 재확인 필요")
+def _mechanism(row, review=None):
+    change_kind = (review or {}).get("change_kind") or row.get("change_kind")
+    return MECHANISM_BY_KIND.get(change_kind) or MECHANISM_BY_KIND.get(row.get("kind"), "변화 원인 재확인 필요")
+
+
+def _compact(value):
+    return re.sub(r"[^a-z0-9가-힣]", "", unicodedata.normalize("NFKC", str(value or "")).lower())
+
+
+def _domain_hint(text, domains):
+    """Return a lexical taxonomy hint; it is not content-verified classification."""
+    compact = _compact(text)
+    if len(compact) < 2:
+        return None
+    scored = []
+    for domain in domains:
+        labels = [domain.get("name"), domain.get("domain"), domain.get("subfield")]
+        hits = [label for label in labels if len(_compact(label)) >= 2 and _compact(label) in compact]
+        if hits:
+            scored.append((max(len(_compact(label)) for label in hits), len(hits), domain))
+    return max(scored, key=lambda row: (row[0], row[1], row[2].get("id", "")))[2] if scored else None
 
 
 def _domain_pool(store, observations, count=16):
@@ -191,6 +211,7 @@ def frontier_packet(store, topic=None, limit=30):
     else:
         matches = rows
     reviews = _reviewed(store)
+    taxonomy = assets("taxonomy.json")["domains"]
     current = now()
     def priority(row):
         event_date = parse_date(row.get("event_at"))
@@ -215,7 +236,8 @@ def frontier_packet(store, topic=None, limit=30):
             "event_at": row.get("event_at"), "geography": row.get("geography"),
             "kind": row.get("kind"),
             "domain_ids": row.get("domain_ids", []),
-            "lane": _lane(row), "mechanism": _mechanism(row),
+            "lane": _lane(row), "change_kind": review.get("change_kind") if review else row.get("change_kind"),
+            "mechanism": _mechanism(row, review),
             "read_scope": review.get("read_scope") if review else "metadata_only_or_unreviewed",
             "reviewed_summary": review.get("summary") if review else None,
             "reviewed_recent_event_120d": bool(review and recent),
@@ -224,11 +246,24 @@ def frontier_packet(store, topic=None, limit=30):
         if len(atoms) >= 18:
             break
     domains = _domain_pool(store, matches or rows, 16)
+    # Bring topic-matching taxonomy entries into the pool before the rotation
+    # fills remaining slots.  The match is intentionally labelled as a hint.
+    hint_text = " ".join(str(row.get(field, "")) for row in matches[:24]
+                         for field in ("topic", "title"))
+    hinted = []
+    for domain in taxonomy:
+        if _domain_hint(hint_text, [domain]):
+            hinted.append({"domain_id": domain["id"], "domain": domain["name"],
+                           "subfield_id": domain["subfields"][0]["id"],
+                           "subfield": domain["subfields"][0]["name"]})
+    hinted_ids = {item["domain_id"] for item in hinted}
+    domains = hinted + [row for row in domains if row["domain_id"] not in hinted_ids]
+    domains = domains[:16]
     if len(domains) < 2:
         raise ValueError("산업 조합을 만들 분류 정보가 부족합니다.")
     domain_lookup = {item["domain_id"]: item for item in domains}
     anchored = [atom for atom in atoms if atom["reviewed_recent_event_120d"] and
-                atom["kind"] in MECHANISM_KINDS]
+                (atom["kind"] in MECHANISM_KINDS or atom.get("change_kind") in MECHANISM_KINDS)]
     prompts = []
     for index in range(limit):
         archetype = ARCHETYPES[index % len(ARCHETYPES)]
@@ -236,6 +271,10 @@ def frontier_packet(store, topic=None, limit=30):
         atom = anchored[index % len(anchored)] if anchored else None
         mapped_id = next((domain_id for domain_id in atom["domain_ids"]
                           if domain_id in domain_lookup), None) if atom else None
+        explicit_domain = bool(mapped_id)
+        lexical_hint = _domain_hint((atom.get("topic") or "") + " " + (atom.get("title") or ""), taxonomy) if atom else None
+        if not mapped_id and lexical_hint and lexical_hint["id"] in domain_lookup:
+            mapped_id = lexical_hint["id"]
         source_domain = (domain_lookup[mapped_id] if mapped_id else
                          {"domain_id": None, "domain": atom.get("topic") or "미분류 신호",
                           "subfield_id": None, "subfield": "원문에서 분야 확인 필요"} if atom else
@@ -253,7 +292,8 @@ def frontier_packet(store, topic=None, limit=30):
             "source_domain": source_domain,
             "destination_domain": destination,
             "signal_atom": atom,
-            "trend_anchor_status": ("reviewed_recent_original" if mapped_id else
+            "trend_anchor_status": ("reviewed_recent_original" if explicit_domain else
+                                    "reviewed_recent_lexical_domain_hint" if mapped_id else
                                     "reviewed_recent_needs_domain_classification") if atom else "unanchored_research_prompt",
             "challenge": (
                 f"{anchor_context}{archetype['question']} "
@@ -304,6 +344,9 @@ def frontier_packet(store, topic=None, limit=30):
             "reviewed_recent_mechanism_anchors_120d": len(anchored),
             "mapped_mechanism_anchors_120d": sum(any(domain_id in domain_lookup for domain_id in atom["domain_ids"])
                                                   for atom in anchored),
+            "lexical_domain_hints_120d": sum(bool(_domain_hint((atom.get("topic") or "") + " " +
+                                                               (atom.get("title") or ""), taxonomy))
+                                              for atom in anchored),
             "signal_lanes": lanes, "domain_pool": len(domains),
         },
         "freshness_research_routes": research_routes,
@@ -451,7 +494,12 @@ def _evaluate_one(candidate, observations, reviewed, comparison_texts):
         "reviewed_recent_original_120d": bool(reviewed_recent),
         "independent_recent_origins": len(recent_origins) >= 2,
         "cross_lane_recent": len(recent_lanes) >= 2,
-        "recent_mechanism_signal": any(row.get("kind") in MECHANISM_KINDS for row in reviewed_recent),
+        "recent_mechanism_signal": any(
+            row.get("kind") in MECHANISM_KINDS or
+            reviewed[row["id"]].get("change_kind") in MECHANISM_KINDS or
+            row.get("change_kind") in MECHANISM_KINDS
+            for row in reviewed_recent
+        ),
     }
     execution = {
         "leading_indicator_prespecified": len(candidate["leading_indicator"]) >= 18,

@@ -20,6 +20,13 @@ KST = timezone(timedelta(hours=9))
 SECRETS = ("NAVER_HUB_CLIENT_ID", "NAVER_HUB_CLIENT_SECRET", "YOUTUBE_API_KEY", "BIZINFO_API_KEY",
            "KOSIS_API_KEY", "X_BEARER_TOKEN")
 
+# Reviewer-attested change mechanisms.  These classify a read source; they do
+# not turn a source into customer demand or a validated opportunity.
+CHANGE_KINDS = {"regulation", "standard", "job", "procurement_award", "price_change",
+                "crowdfunding", "review", "comment", "customer_observation", "transaction",
+                "aggregate_metric", "patent", "paper", "climate_event", "policy_budget",
+                "supply_chain", "demand_shift", "capacity_change", "business_model_change"}
+
 
 def now():
     return datetime.now(UTC)

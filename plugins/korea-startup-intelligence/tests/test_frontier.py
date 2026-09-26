@@ -44,6 +44,7 @@ class FrontierDiscoveryTest(unittest.TestCase):
             "family": "policy", "summary": "원문에서 수리·부품 정보 제공 변경을 확인했다.",
             "origin_group": "regulator-one", "origin_note": "규제 원문",
             "reviewer": "test", "collection_basis": "public_source_verified",
+            "change_kind": "regulation",
             "limitations": ["특정 제도 범위"],
         })
 
@@ -180,6 +181,24 @@ class FrontierDiscoveryTest(unittest.TestCase):
         self.assertEqual(packet["coverage"]["reviewed_recent_mechanism_anchors_120d"], 0)
         self.assertTrue(all(prompt["trend_anchor_status"] == "unanchored_research_prompt"
                             for prompt in packet["generation_prompts"]))
+
+    def test_manual_review_change_kind_can_become_a_recent_mechanism_anchor(self):
+        manual = observation("manual", "manual_evidence", "산업 전환", "산업 전환 예산 변경",
+                             "https://example.com/manual-policy", stamp(now() - timedelta(days=3)),
+                             collection_basis="public_source_verified", origin_key="manual-policy")
+        with self.store.db:
+            self.store.put_observation(manual)
+        radar.review_source(self.store, {
+            "evidence_id": manual["id"], "read_scope": "full_text", "family": "policy",
+            "summary": "예산안 원문에서 지원 대상과 금액 변경을 확인했다.",
+            "origin_group": "manual-policy", "origin_note": "공식 예산 원문", "reviewer": "test",
+            "collection_basis": "public_source_verified", "change_kind": "policy_budget",
+            "limitations": ["사업 집행과 고객 구매는 미확인"],
+        })
+        packet = frontier.frontier_packet(self.store, topic="산업 전환", limit=30)
+        self.assertGreaterEqual(packet["coverage"]["reviewed_recent_mechanism_anchors_120d"], 1)
+        atom = next(atom for atom in packet["signal_atoms"] if atom.get("change_kind") == "policy_budget")
+        self.assertEqual(atom["mechanism"], "정책·예산 변경")
 
     def test_cli_frontier_is_read_only_and_returns_thirty_prompts(self):
         cli = ROOT / "scripts" / "ksi.py"

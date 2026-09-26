@@ -9,7 +9,7 @@ import re
 from datetime import timedelta
 
 from . import blue_ocean, radar, social, venture_intelligence
-from .model import assets, canonical_url, now, observation, parse_date, stamp
+from .model import CHANGE_KINDS, assets, canonical_url, now, observation, parse_date, stamp
 
 
 KINDS = {"article", "post", "comment", "job", "patent", "standard", "paper",
@@ -33,6 +33,7 @@ def template():
             "collection_basis": "public_source_verified", "limitations": [],
             "metrics": {}, "measurement": None, "demand_or_supply": "context",
             "comparison_key": None, "speaker_role": "unknown",
+            "change_kind": None,
             "promotion_or_ad": False, "seasonal_event": False, "bot_or_coordinated": False,
             "force_recheck": False,
             "warning": "원문을 실제 읽은 후 자기 말로 요약; 접근 제한 우회·개인정보·키 저장 금지"}
@@ -87,6 +88,9 @@ def _prepare_signal(store, payload):
     role = payload.get("demand_or_supply", "context")
     if role not in ("demand", "supply", "context"):
         raise ValueError("demand_or_supply를 구분하세요.")
+    change_kind = payload.get("change_kind")
+    if change_kind is not None and change_kind not in CHANGE_KINDS:
+        raise ValueError("change_kind는 검토자가 확인한 지원 변화 유형이어야 합니다.")
     comparison_key = payload.get("comparison_key")
     if comparison_key is not None:
         if not isinstance(comparison_key, str) or not re.fullmatch(r"[a-zA-Z0-9가-힣_.:-]{1,120}", comparison_key):
@@ -101,6 +105,7 @@ def _prepare_signal(store, payload):
                       content_scope="reviewed_" + scope, collection_basis=basis,
                       metrics=metrics, measurement=measurement, demand_or_supply=role,
                       comparison_key=comparison_key, speaker_role=speaker_role,
+                      change_kind=change_kind,
                       promotion_or_ad=payload.get("promotion_or_ad", False),
                       seasonal_event=payload.get("seasonal_event", False),
                       bot_or_coordinated=payload.get("bot_or_coordinated", False),
@@ -113,14 +118,15 @@ def _prepare_signal(store, payload):
               "collection_basis": basis, "reviewed_at": stamp(), "url": row["url"],
               "event_at": row["event_at"], "limitations": limitations,
               "date_basis": "source_publication_or_event", "verification": "reviewer_attestation_not_independent_audit"}
+    review["change_kind"] = change_kind
     previous_row = next((item for item in store.observations() if item["id"] == row["id"]), None)
     previous_review_row = store.db.execute("SELECT data FROM source_reviews WHERE evidence_id=?", (row["id"],)).fetchone()
     previous_review = json.loads(previous_review_row["data"]) if previous_review_row else None
     stable_fields = ("kind", "topic", "title", "url", "event_at", "geography", "domain_ids", "metrics",
-                     "measurement", "demand_or_supply", "comparison_key", "speaker_role", "promotion_or_ad", "seasonal_event",
+                     "measurement", "demand_or_supply", "comparison_key", "speaker_role", "change_kind", "promotion_or_ad", "seasonal_event",
                      "bot_or_coordinated")
     review_fields = ("read_scope", "family", "summary", "origin_group", "origin_note", "reviewer",
-                     "collection_basis", "limitations")
+                     "collection_basis", "limitations", "change_kind")
     if not payload.get("force_recheck", False) and previous_row and previous_review and \
             all(previous_row.get(field) == row.get(field) for field in stable_fields) and \
             all(previous_review.get(field) == review.get(field) for field in review_fields):

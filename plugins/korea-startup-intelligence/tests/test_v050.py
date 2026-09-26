@@ -288,6 +288,8 @@ class VentureIntelligenceTest(unittest.TestCase):
         self.assertEqual(metrics["problem_confirmation_denominator"], 2)
         self.assertIsNone(metrics["false_positive_rate"])
         self.assertIsNone(metrics["time_saved_minutes"])
+        self.assertEqual(metrics["frontier_discovery"]["batch_denominator"], 0)
+        self.assertIsNone(metrics["frontier_discovery"]["generic_rejection_rate"])
 
     def test_execution_package_tasks_and_external_action_gate(self):
         candidate_id = self.add_candidate()

@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 from uuid import uuid4
 from .engine import dedupe, refresh
 from .model import (KST, assets, atomic_json, atomic_text, canonical_url, clean,
-                    digest, now, observation, parse_date, stamp, validate_record)
+                    CHANGE_KINDS, digest, now, observation, parse_date, stamp, validate_record)
 
 DEFAULT_RADAR = {
     "schema_version": 1, "operating_mode": "on_demand", "scheduler_required": False,
@@ -120,6 +120,9 @@ def review_source(store, item):
         raise ValueError("Unknown evidence family")
     for key in ("summary", "origin_group", "origin_note", "reviewer"):
         bounded_text(item.get(key), key, 1500 if key == "summary" else 240)
+    change_kind = item.get("change_kind")
+    if change_kind is not None and change_kind not in CHANGE_KINDS:
+        raise ValueError("change_kind must be a reviewer-attested supported change mechanism")
     if item.get("collection_basis") not in ("public_source_verified", "user_owned", "authorized_export"):
         raise ValueError("An authorized source basis is required")
     # origin_group is an explicit reviewer judgement about the original producer,
@@ -140,6 +143,7 @@ def review_source(store, item):
                           geography=item.get("geography", "unknown"),
                           content_scope="agent_source_review_summary", limitations=["agent_review_not_independent_audit"])
     review = {k: item[k] for k in ("read_scope", "family", "summary", "origin_group", "origin_note", "reviewer", "collection_basis")}
+    review["change_kind"] = change_kind
     review.update({"evidence_id": row["id"], "reviewed_at": stamp(), "url": row["url"],
                    "event_at": row["event_at"], "limitations": text_list(item.get("limitations", []), "limitations", minimum=0),
                    "date_basis": item.get("date_basis", "publication_or_event_as_described_in_summary"),

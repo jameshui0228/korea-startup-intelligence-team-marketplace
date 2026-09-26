@@ -1,6 +1,6 @@
 {
   "name": "korea-startup-intelligence",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "한국의 최근 변화 신호를 참신한 30→10→3 창업 가설로 발산·반증하고 개인 창업 실행까지 관리하는 허구김 에이전트",
   "author": {
     "name": "James Hui"

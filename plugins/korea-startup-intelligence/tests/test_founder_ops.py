@@ -172,11 +172,14 @@ class FounderOperationsTest(unittest.TestCase):
                                collection_basis="user_owned")
         with self.store.db:
             self.store.put_observation(measured)
-        result = founder_ops.save_kpi_snapshot(self.store, {"plan_id": plan["id"], "week_start": "2026-09-14",
+        kst_today = now().astimezone(founder_ops.KST).date()
+        current_monday = kst_today - timedelta(days=kst_today.weekday())
+        week_start = current_monday.isoformat()
+        result = founder_ops.save_kpi_snapshot(self.store, {"plan_id": plan["id"], "week_start": week_start,
             "values": {"revenue": 120000}, "evidence_ids": [measured["id"]],
             "summary": "허용된 결제 집계 기준", "limitations": ["환불 반영 전"]})
         self.assertEqual(result["record"]["judgements"]["revenue"], "on_target")
-        replay = founder_ops.save_kpi_snapshot(self.store, {"plan_id": plan["id"], "week_start": "2026-09-14",
+        replay = founder_ops.save_kpi_snapshot(self.store, {"plan_id": plan["id"], "week_start": week_start,
             "values": {"revenue": 120000}, "evidence_ids": [measured["id"]],
             "summary": "허용된 결제 집계 기준", "limitations": ["환불 반영 전"]})
         self.assertEqual(replay["status"], "unchanged")

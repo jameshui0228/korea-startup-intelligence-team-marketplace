@@ -713,6 +713,23 @@ def performance_metrics(store):
     plugin = [r for r in usability if r.get("condition") == "plugin" and r.get("completed")]
     avg = lambda rows: sum(r.get("minutes", 0) for r in rows) / len(rows) if rows else None
     manual_avg, plugin_avg = avg(manual), avg(plugin)
+    # Frontier discovery is intentionally measured separately from validated
+    # opportunities.  A generated hypothesis, an original recent anchor and
+    # a shortlist are different denominators; conflating them would make
+    # novelty look like demand or execution evidence.
+    frontier_batches = store.records("frontier_batch")
+    frontier_hypotheses = store.records("frontier_hypothesis")
+    frontier_evaluations = [row.get("evaluation") for row in frontier_hypotheses
+                            if isinstance(row.get("evaluation"), dict)]
+    frontier_shortlist = sum(len(row.get("shortlist", [])) for row in frontier_batches)
+    frontier_raw = sum(len(row.get("candidate_ids", [])) for row in frontier_batches)
+    frontier_generic = sum(row.get("tier") == "reject_generic" for row in frontier_evaluations)
+    frontier_anchored = sum(bool((row.get("trend_dimensions") or {}).get("reviewed_recent_original_120d"))
+                             for row in frontier_evaluations)
+    frontier_mechanism = sum(bool((row.get("trend_dimensions") or {}).get("recent_mechanism_signal"))
+                              for row in frontier_evaluations)
+    frontier_full = sum(bool((row.get("diversity") or {}).get("full_tournament"))
+                        for row in frontier_batches)
     return {
         "lead_time_to_baseline": {"mean_seconds": sum(leads) / len(leads) if leads else None, "n": len(leads)},
         "problem_confirmation_rate": confirmed / len(candidates) if candidates else None,
@@ -731,6 +748,26 @@ def performance_metrics(store):
         "decision_n": len(decision_durations),
         "time_saved_minutes": manual_avg - plugin_avg if manual_avg is not None and plugin_avg is not None else None,
         "usability_manual_n": len(manual), "usability_plugin_n": len(plugin),
+        "frontier_discovery": {
+            "batch_count": len(frontier_batches),
+            "batch_denominator": len(frontier_batches),
+            "hypothesis_count": len(frontier_hypotheses),
+            "evaluated_hypothesis_count": len(frontier_evaluations),
+            "generic_rejection_rate": frontier_generic / len(frontier_evaluations)
+                                      if frontier_evaluations else None,
+            "generic_rejection_denominator": len(frontier_evaluations),
+            "recent_original_anchor_rate": frontier_anchored / len(frontier_evaluations)
+                                           if frontier_evaluations else None,
+            "recent_original_anchor_denominator": len(frontier_evaluations),
+            "recent_mechanism_signal_rate": frontier_mechanism / len(frontier_evaluations)
+                                             if frontier_evaluations else None,
+            "recent_mechanism_signal_denominator": len(frontier_evaluations),
+            "shortlist_conversion_rate": frontier_shortlist / frontier_raw if frontier_raw else None,
+            "shortlist_denominator_raw_candidates": frontier_raw,
+            "full_tournament_rate": frontier_full / len(frontier_batches) if frontier_batches else None,
+            "full_tournament_denominator": len(frontier_batches),
+            "boundary": "프런티어 발산·원문 앵커·토너먼트 품질을 등록된 가설 분모로만 측정하며 수요·선행성·성공확률이 아닙니다.",
+        },
         "boundary": "등록·관측된 분모에 한한 기술통계입니다. 전체 시장 성과나 플러그인 인과효과가 아닙니다.",
     }
 

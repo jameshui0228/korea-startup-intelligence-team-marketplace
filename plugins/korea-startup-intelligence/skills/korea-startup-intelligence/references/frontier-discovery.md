@@ -20,6 +20,12 @@
 `blue-ocean frontier --limit 30 --topic "주제"`를 실행한다. 반환된 `signal_atoms` 중 관심 후보의 원문을 연다.
 제목·검색 조각만 있는 신호는 리드로만 쓴다. 원문에서 다음을 복원한다.
 
+원문을 실제 읽어 수동 접수할 때는 `change_kind`를 검토자가 확인한 변화 메커니즘으로 선택할 수 있다
+(예: `regulation`, `policy_budget`, `job`, `procurement_award`, `price_change`,
+`customer_observation`, `transaction`, `climate_event`, `supply_chain`, `demand_shift`).
+이는 “무엇이 변했는가”를 표시하는 분류일 뿐 고객 수요·지불·기회 검증이 아니다. 판매자 홍보나
+검색 급등을 변화 메커니즘으로 임의 분류하지 않고, 불확실하면 `change_kind`를 비워 둔다.
+
 `coverage.reviewed_recent_mechanism_anchors_120d`가 0이면 **먼저** `freshness_research_routes`에서
 구조 변화·고객 불편·새 공급·공개 SNS를 적어도 하나씩 고르고, 현재 웹에서 실제 원문을 찾아 날짜/생산자/읽은 범위와 함께
 `signal batch-import`로 접수한다. 이 단계가 불가능하면 30개 프롬프트는 시나리오 발상으로만 쓰며 “지금 뜨는 트렌드”라고 제시하지 않는다.
@@ -72,6 +78,10 @@
 어떤 벡터도 성공확률이나 미래 예측 정확도가 아니다. 최근 원문이 없으면 Emerging/Executable로 올리지 않는다.
 `--apply`는 선정·탈락·수정 후보를 모두 로컬 학습 분모로 저장하지만
 아직 `blue_ocean` 검증 후보로 승격시키지 않는다. 상위 3개는 원문 조사와 dossier를 보강한 뒤에만 승격한다.
+
+`blue-ocean metrics`의 `frontier_discovery`는 가설 수, 평범한 재포장 탈락률, 최근 원문 앵커 비율,
+변화 메커니즘 신호 비율, shortlist 전환률, 완전 토너먼트 비율을 각각 등록된 가설/배치 분모로 보여 준다.
+분모가 0이면 `null`이며, 이 지표를 시장 수요·선행시간·성공확률로 해석하지 않는다.
 
 ## 5. 사용자에게 보여 줄 세 등급
 
