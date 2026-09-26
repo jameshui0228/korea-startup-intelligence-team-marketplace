@@ -108,7 +108,7 @@ REQUIRED_FIELDS = (
 OPTIONAL_CANDIDATE_FIELDS = (
     "problem", "payer", "current_alternative", "current_spend", "supply_gap", "claims",
 )
-EVALUATOR_VERSION = "claim-ledger-v1"
+EVALUATOR_VERSION = "claim-ledger-v2-legacy-and-freshness-gates"
 
 
 def _tokens(value):
@@ -564,7 +564,8 @@ def _evaluate_one(candidate, observations, reviewed, comparison_texts):
     elif (novelty_strength >= 5 and evidence_strength >= 4 and trend_relevance >= 5
           and execution_clarity >= 4 and claim_strong):
         tier = "executable_candidate"
-    elif novelty_strength >= 4 and evidence_strength >= 2 and trend["reviewed_recent_original_120d"] and claim_emerging:
+    elif (novelty_strength >= 4 and evidence_strength >= 2 and
+          trend["reviewed_recent_original_120d"] and trend["recent_mechanism_signal"] and claim_emerging):
         tier = "emerging_candidate"
     else:
         tier = "frontier_hypothesis"
@@ -581,6 +582,8 @@ def _evaluate_one(candidate, observations, reviewed, comparison_texts):
         warnings.append("no_claim_scoped_support")
     if attached and not trend["reviewed_recent_original_120d"]:
         warnings.append("no_reviewed_recent_original_120d")
+    if not trend["recent_mechanism_signal"]:
+        warnings.append("recent_mechanism_anchor_missing")
     if reviewed_recent and len(recent_origins) < 2:
         warnings.append("recent_signal_single_origin")
     warnings.append("mainstream_lead_time_not_measured")

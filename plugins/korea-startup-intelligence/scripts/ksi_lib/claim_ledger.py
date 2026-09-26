@@ -31,6 +31,17 @@ SUPPORT_BASES = {
     "structural_change": BASES - {"provider_claim", "analyst_inference"},
     "why_now": BASES - {"provider_claim", "analyst_inference"},
     "korea_wedge": CUSTOMER_BASES | {"official_rule", "measured_series"},
+    "timing": BASES - {"provider_claim", "analyst_inference"},
+    "korea_fit": CUSTOMER_BASES | {"official_rule", "measured_series"},
+    "reachability": {"direct_customer", "observed_behavior", "transaction"},
+    "switching_reason": CUSTOMER_BASES,
+    "counterevidence": BASES - {"analyst_inference"},
+    "velocity": {"measured_series", "aggregate_measurement"},
+    "breadth": {"measured_series", "aggregate_measurement"},
+    "persistence": {"measured_series", "aggregate_measurement"},
+    "cross_channel": {"measured_series", "aggregate_measurement"},
+    "novelty": BASES - {"provider_claim", "analyst_inference"},
+    "manipulation_risk": BASES - {"provider_claim", "analyst_inference"},
 }
 NEXT_CHECKS = {
     "customer": "초기 고객의 실제 역할·행동을 보여 주는 원문 확인",
@@ -181,9 +192,12 @@ def normalize_claims(raw_claims, candidate, observations, reviewed, previous=Non
 
 
 def _link_issue(field, claim, link, observations, reviewed):
-    row, review = observations.get(link["evidence_id"]), reviewed.get(link["evidence_id"])
+    evidence_id = link.get("evidence_id")
+    row, review = observations.get(evidence_id), reviewed.get(evidence_id)
     if not row:
         return "evidence_missing_or_expired"
+    if not link.get("source_signature") or not link.get("claim_signature"):
+        return "historical_link_unbound"
     if link.get("claim_signature") != _claim_signature(field, claim.get("statement"), link):
         return "claim_or_interpretation_changed"
     if link.get("source_signature") != source_signature(row):
@@ -196,7 +210,7 @@ def _link_issue(field, claim, link, observations, reviewed):
 
 
 def _basis_issue(field, claim, link, row, review):
-    basis, kind = link["basis"], row.get("kind")
+    basis, kind = link.get("basis"), row.get("kind")
     if basis not in SUPPORT_BASES.get(field, BASES):
         return "basis_not_fit"
     if claim.get("status") == "FACT" and basis == "analyst_inference":
@@ -294,3 +308,91 @@ def claim_evidence_ids(report, fields=None, relation="supports"):
             if link["relation"] == relation and link["valid"] and (relation != "supports" or link["eligible_support_basis"]):
                 ids.append(link["evidence_id"])
     return sorted(set(ids))
+
+
+def bind_structured_claims(candidate, original, previous, observations, reviewed):
+    """Bind blue-ocean links on creation; old links need explicit fresh review."""
+    for section in ("assessments", "signal_profile"):
+        for field, item in candidate.get(section, {}).items():
+            prior_item = (previous or {}).get(section, {}).get(field, {})
+            prior_links = {(link.get("evidence_id"), link.get("relation")): link
+                           for link in prior_item.get("links", [])}
+            original_links = (original.get(section, {}).get(field) or {}).get("links", [])
+            old_counter_ids = {link.get("evidence_id") for link in prior_item.get("links", [])
+                               if link.get("relation") == "contradicts"}
+            new_counter_ids = {link.get("evidence_id") for link in item.get("links", [])
+                               if link.get("relation") == "contradicts"}
+            new_ids = {link.get("evidence_id") for link in item.get("links", [])}
+            if old_counter_ids - new_ids:
+                raise ValueError(f"{section}.{field}: 기존 반례를 삭제하지 말고 재검토 관계·이유를 기록하세요.")
+            original_by_key = {(raw.get("evidence_id"), raw.get("relation")): raw
+                               for raw in original_links if isinstance(raw, dict)}
+            for index, link in enumerate(item.get("links", [])):
+                old_link = prior_links.get((link["evidence_id"], link["relation"]))
+                raw = original_by_key.get((link["evidence_id"], link["relation"]))
+                if raw is None:
+                    raw = original_links[index] if index < len(original_links) else {}
+                if type(raw.get("rechecked", False)) is not bool:
+                    raise ValueError(f"{section}.{field}.links.rechecked: true/false가 필요합니다.")
+                rechecked = raw.get("rechecked", False)
+                if (link["evidence_id"] in old_counter_ids and
+                        link["evidence_id"] not in new_counter_ids and not rechecked):
+                    raise ValueError(f"{section}.{field}: 반례 관계를 바꾸려면 원문 재검토와 rechecked=true가 필요합니다.")
+                if rechecked and (not old_link or link["evidence_id"] not in reviewed):
+                    raise ValueError(f"{section}.{field}: 원문을 다시 검토한 기존 링크만 rechecked=true로 기록하세요.")
+                if old_link and not rechecked:
+                    for name in BINDING_FIELDS:
+                        link[name] = old_link.get(name)
+                else:
+                    evidence_id = link["evidence_id"]
+                    link.update(source_signature=source_signature(observations[evidence_id]),
+                                review_signature=(review_signature(reviewed[evidence_id])
+                                                  if evidence_id in reviewed else None),
+                                claim_signature=_claim_signature(section + "." + field, item["conclusion"], link))
+
+
+def assess_structured_claims(candidate, observations, reviewed):
+    """Apply frontier's source/review/interpretation and typed-basis checks to legacy portfolio claims."""
+    sections, support_ids, problems = {}, set(), []
+    for section in ("assessments", "signal_profile"):
+        section_report = {}
+        for field, item in candidate.get(section, {}).items():
+            claim = {"statement": item.get("conclusion"), "status": item.get("status")}
+            namespace = section + "." + field
+            links = []
+            for link in item.get("links", []):
+                issue = _link_issue(namespace, claim, link, observations, reviewed)
+                row = observations.get(link.get("evidence_id"), {})
+                # The namespace signs the interpretation; the semantic field
+                # selects the same evidence-basis gate used by frontier.
+                basis_issue = _basis_issue(field, claim, link, row, reviewed.get(link.get("evidence_id")))
+                links.append({"evidence_id": link.get("evidence_id"), "relation": link.get("relation"),
+                              "basis": link.get("basis"), "locator": link.get("locator"),
+                              "valid": issue is None, "reason": issue,
+                              "eligible_support_basis": basis_issue is None, "basis_issue": basis_issue})
+            supports = [link for link in links if link["relation"] == "supports" and link["valid"]
+                        and link["eligible_support_basis"]]
+            counters = [link for link in links if link["relation"] == "contradicts" and link["valid"]]
+            stale = [link for link in links if link["reason"] and link["relation"] != "context"]
+            if counters:
+                derived = "CONTESTED" if supports else "CONTRADICTED"
+            elif stale:
+                derived = "RECHECK"
+            elif item.get("status") in {"ASSUMPTION", "UNKNOWN"}:
+                derived = "UNTESTED"
+            elif supports:
+                derived = "SUPPORTED" if item["status"] == "FACT" else "INFERRED"
+            else:
+                derived = "UNSUPPORTED"
+            if derived in SUPPORTED:
+                support_ids.update(link["evidence_id"] for link in supports)
+            if derived in {"RECHECK", "CONTESTED", "CONTRADICTED"}:
+                problems.append(namespace)
+            section_report[field] = {
+                "declared_status": item.get("status"), "derived_status": derived,
+                "statement": item.get("conclusion"), "links": links,
+                "eligible_support_count": len(supports), "contradiction_count": len(counters),
+            }
+        sections[section] = section_report
+    return {**sections, "valid_support_ids": sorted(support_ids), "needs_review": sorted(problems),
+            "boundary": "기존 기록도 원문·검토·해석·근거 성격으로 재평가하며 과거 미서명 링크는 자동으로 새 사실이 되지 않습니다."}

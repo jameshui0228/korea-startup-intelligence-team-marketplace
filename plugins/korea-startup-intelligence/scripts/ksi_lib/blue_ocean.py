@@ -12,6 +12,7 @@ from pathlib import Path
 
 from .model import assets, atomic_json, atomic_text, clean, digest, now, parse_date, stamp
 from . import venture_intelligence as intelligence
+from . import claim_ledger
 
 
 ASSESSMENTS = {
@@ -226,6 +227,9 @@ def save(store, payload):
         raise ValueError("signal_profile: 정의된 신호 항목만 사용하세요.")
     data["assessments"] = {k: _claim(assessment_input.get(k), k, ids) for k in ASSESSMENTS}
     data["signal_profile"] = {k: _claim(signal_input.get(k), k, ids) for k in SIGNAL_DIMENSIONS}
+    observations = {row["id"]: row for row in store.observations()}
+    claim_ledger.bind_structured_claims(data, payload, old, observations,
+                                        claim_ledger.current_reviews(store))
     data["alternatives"] = _alternatives(payload.get("alternatives", []), ids)
     data["next_action"] = _next_action(payload.get("next_action"), stage in ACTIVE_STAGES)
     review_after = parse_date(payload.get("review_after")) if payload.get("review_after") else None
@@ -285,28 +289,16 @@ def _source_diversity(store, ids):
 
 def assess(store, candidate):
     ids = set(candidate.get("evidence_ids", []))
-    current = {o["id"] for o in store.observations()}
+    observations = {o["id"]: o for o in store.observations()}
+    current = set(observations)
     stale_ids = sorted(ids - current)
-    diversity = _source_diversity(store, sorted(ids & current))
-    substantive = set(diversity["substantive_evidence_ids"])
-    def typed_backing(name, item, customer_required=False):
-        if item.get("status") not in ("FACT", "INFERENCE"):
-            return False
-        # A contradiction is valuable counterevidence, not support for the
-        # positive claim. In particular it must not unlock a customer-demand
-        # gate or an alert by itself.
-        links = [link for link in item.get("links", [])
-                 if link.get("relation") == "supports" and link.get("evidence_id") in substantive]
-        if not links or any(link.get("evidence_id") not in current for link in links):
-            return False
-        if customer_required and not any(link.get("basis") in CUSTOMER_BASES for link in links):
-            return False
-        return True
-    customer_dimensions = {"problem", "current_spend", "reachability", "switching_reason"}
-    backed = [k for k, item in candidate.get("assessments", {}).items()
-              if typed_backing(k, item, k in customer_dimensions)]
-    signal_backed = [k for k, item in candidate.get("signal_profile", {}).items()
-                     if typed_backing(k, item)]
+    claims = claim_ledger.assess_structured_claims(candidate, observations,
+                                                   claim_ledger.current_reviews(store))
+    backed = [name for name, item in claims["assessments"].items()
+              if item["derived_status"] in claim_ledger.SUPPORTED]
+    signal_backed = [name for name, item in claims["signal_profile"].items()
+                     if item["derived_status"] in claim_ledger.SUPPORTED]
+    diversity = _source_diversity(store, claims["valid_support_ids"])
     core = {"problem", "current_spend", "supply_gap", "timing", "korea_fit", "reachability", "switching_reason"}
     missing_core = sorted(core - set(backed))
     reasons = ["missing_evidence:" + key for key in missing_core]
@@ -320,6 +312,11 @@ def assess(store, candidate):
         reasons.append("current_workaround_not_compared")
     if stale_ids:
         reasons.append("expired_or_missing_evidence")
+    reasons.extend("claim_requires_review:" + name for name in claims["needs_review"])
+    for section in ("assessments", "signal_profile"):
+        for name, item in claims[section].items():
+            if any(link["relation"] == "supports" and link["basis_issue"] for link in item["links"]):
+                reasons.append("claim_basis_not_fit:" + section + "." + name)
     legacy_claims = [k for k, item in candidate.get("assessments", {}).items()
                      if item.get("status") in ("FACT", "INFERENCE") and not item.get("links")]
     if legacy_claims:
@@ -362,7 +359,7 @@ def assess(store, candidate):
         "passing_validation_results": sum(r.get("outcome") == "criterion_met" for r in validated_results),
         "recorded_validation_results": len(validated_results), "review_overdue": overdue,
         "next_action": candidate.get("next_action"), "recommended_transition": recommended_transition,
-        "legacy_claim_links": legacy_claims,
+        "legacy_claim_links": legacy_claims, "claim_ledger": claims,
         "boundary": "설명 가능한 시장공백 검토 상태이며 성공확률·경쟁 부재 증명이 아닙니다.",
     }
 

@@ -199,6 +199,37 @@ class FrontierDiscoveryTest(unittest.TestCase):
         self.assertNotEqual(row["tier"], "emerging_candidate")
         self.assertNotEqual(row["tier"], "executable_candidate")
 
+    def test_recent_article_without_reviewed_change_mechanism_cannot_be_trend_anchor(self):
+        article = observation("manual", "article", "산업 장비 부품", "최근 업계 관심 기사",
+                              "https://example.com/recent-context", stamp(now() - timedelta(days=2)),
+                              collection_basis="public_source_verified", origin_key="recent-context",
+                              domain_ids=["KR-047"])
+        with self.store.db:
+            self.store.put_observation(article)
+        radar.review_source(self.store, {
+            "evidence_id": article["id"], "read_scope": "full_text", "family": "market",
+            "summary": "관심 주제의 설명과 업계 배경만 확인했다.",
+            "origin_group": "recent-context", "origin_note": "기사 원문", "reviewer": "test",
+            "collection_basis": "public_source_verified", "limitations": ["행동·거래·규칙 변화 미확인"],
+        })
+        candidate = self.candidate(
+            "recent-context-hypothesis", "KR-047", "reverse_trend", "managed_service",
+            "최근 관심 주제의 유지보수 공백", "노후 장비를 운영하는 중소 제조사 담당자",
+            "관심 기사가 늘었지만 실제 구조 변화는 아직 확인하지 않았다.",
+            "기사의 관심도만으로 반복 고객 문제를 추정하지 않는다.")
+        candidate["evidence_ids"] = [article["id"]]
+        candidate["counterevidence_ids"] = []
+        result = frontier.evaluate_tournament(self.store, {
+            "batch_key": "recent-context-gate", "candidates": [candidate,
+                {**candidate, "key": "recent-context-two", "title": "최근 관심의 다른 공백"},
+                {**candidate, "key": "recent-context-three", "title": "최근 관심의 세 번째 공백"}],
+        })
+        row = next(item for item in result["evaluations"]
+                   if item["candidate_id"] == "frontier-recent-context-hypothesis")
+        self.assertFalse(row["trend_dimensions"]["recent_mechanism_signal"])
+        self.assertIn("recent_mechanism_anchor_missing", row["warnings"])
+        self.assertNotIn(row["tier"], {"emerging_candidate", "executable_candidate"})
+
     def test_review_older_than_fourteen_days_is_not_a_current_original(self):
         evidence_id = self.rows[1]["id"]
         with self.store.db:

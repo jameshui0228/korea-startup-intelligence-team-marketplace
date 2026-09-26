@@ -84,6 +84,58 @@ class BlueOceanTest(unittest.TestCase):
         self.assertEqual(result["assessment"]["evidence_backed_assessments"], [])
         self.assertEqual(result["assessment"]["whitespace_state"], "unproven")
 
+    def test_existing_claim_links_are_bound_and_rechecked_after_source_change(self):
+        radar.review_source(self.store, {
+            "evidence_id": self.row["id"], "read_scope": "full_text",
+            "family": "market", "summary": "원문에서 반복 업무의 존재를 확인했다.",
+            "origin_group": "example-original-publisher", "origin_note": "원 생산자 본문",
+            "reviewer": "test", "collection_basis": "public_source_verified",
+            "limitations": ["고객별 빈도는 미확인"],
+        })
+        payload = self.payload()
+        payload["assessments"] = {"problem": {
+            "status": "FACT", "conclusion": "원문에서 반복 업무의 존재를 확인했다.",
+            "evidence_ids": [self.row["id"]], "links": [{
+                "evidence_id": self.row["id"], "relation": "supports",
+                "basis": "official_research", "locator": "본문 3절", "note": "반복 업무 언급",
+            }],
+        }}
+        result = blue_ocean.save(self.store, payload)
+        self.assertIn("problem", result["assessment"]["evidence_backed_assessments"])
+        stored = self.store.records("blue_ocean")[0]
+        link = stored["assessments"]["problem"]["links"][0]
+        self.assertRegex(link["source_signature"], r"^[a-f0-9]{64}$")
+        self.assertRegex(link["review_signature"], r"^[a-f0-9]{64}$")
+
+        with_counter = self.payload()
+        with_counter["expected_revision"] = 1
+        with_counter["assessments"] = {"problem": {
+            "status": "FACT", "conclusion": "원문에서 반복 업무의 존재를 확인했다.",
+            "evidence_ids": [self.row["id"]], "links": [
+                {"evidence_id": self.row["id"], "relation": "supports",
+                 "basis": "official_research", "locator": "본문 3절", "note": "반복 업무 언급"},
+                {"evidence_id": self.row["id"], "relation": "contradicts",
+                 "basis": "official_research", "locator": "본문 6절", "note": "반복성 일반화의 반례"},
+            ],
+        }}
+        blue_ocean.save(self.store, with_counter)
+        removed_counter = self.payload()
+        removed_counter["expected_revision"] = 2
+        removed_counter["assessments"] = payload["assessments"]
+        with self.assertRaisesRegex(ValueError, "반례 관계"):
+            blue_ocean.save(self.store, removed_counter)
+
+        radar.review_source(self.store, {
+            "evidence_id": self.row["id"], "read_scope": "full_text",
+            "family": "market", "summary": "재검토 결과 반복 업무는 특정 사례에 한정됐다.",
+            "origin_group": "example-original-publisher", "origin_note": "원 생산자 재검토",
+            "reviewer": "test", "collection_basis": "public_source_verified",
+            "limitations": ["일반화 불가"],
+        })
+        current = blue_ocean.assess(self.store, stored)
+        self.assertIn("claim_requires_review:assessments.problem", current["blocking_gaps"])
+        self.assertEqual(current["claim_ledger"]["assessments"]["problem"]["derived_status"], "RECHECK")
+
     def test_contradiction_is_not_positive_evidence_for_customer_problem(self):
         radar.review_source(self.store, {
             "evidence_id": self.row["id"], "read_scope": "relevant_sections",
