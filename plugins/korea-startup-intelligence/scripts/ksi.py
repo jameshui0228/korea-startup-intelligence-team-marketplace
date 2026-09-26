@@ -217,7 +217,8 @@ def run(args):
         if args.command == "blue-ocean" and args.action == "catch-up":
             return venture_intelligence.catch_up(store, args.since)
         if args.command == "blue-ocean" and args.action == "frontier":
-            return frontier.frontier_packet(store, args.topic, args.limit)
+            variation = stamp(now()) if args.fresh else args.variation
+            return frontier.frontier_packet(store, args.topic, args.limit, variation)
         if args.command == "blue-ocean" and args.action == "frontier-template":
             return frontier.tournament_template()
         if args.command == "blue-ocean" and args.action == "frontier-list":
@@ -225,7 +226,8 @@ def run(args):
         if args.command == "blue-ocean" and args.action == "frontier-claims":
             return frontier.claim_report(store, args.id)
         if args.command == "blue-ocean" and args.action == "tournament" and not args.apply:
-            return frontier.evaluate_tournament(store, json.loads(Path(args.file).read_text()), apply=False)
+            return frontier.evaluate_tournament(store, json.loads(Path(args.file).read_text()), apply=False,
+                                                require_full=args.full_only)
         if args.command == "blue-ocean" and args.action == "bootstrap" and not args.apply:
             return prevalidation.bootstrap(store, args.id, args.limit, apply=False)
         if args.command == "blue-ocean" and args.action == "onboard":
@@ -276,7 +278,8 @@ def run(args):
                             "prevalidation": prevalidation.bootstrap(store, limit=min(args.limit, 5), apply=False),
                             "boundary": "프런티어 조합은 발산 재료입니다. Codex가 실제 원문을 열고 30→10→3 토너먼트를 완료해야 하며, 명령 자체는 고객 수요를 검증하지 않습니다."}
                 if args.action == "tournament":
-                    return frontier.evaluate_tournament(store, json.loads(Path(args.file).read_text()), apply=True)
+                    return frontier.evaluate_tournament(store, json.loads(Path(args.file).read_text()), apply=True,
+                                                        require_full=args.full_only)
                 if args.action == "template":
                     return blue_ocean.template()
                 if args.action == "save":
@@ -568,10 +571,14 @@ def main():
     r = actions.add_parser("frontier", help="Build 30 structurally different discovery prompts before conservative validation")
     r.add_argument("--topic", help="Optional customer change or market theme to narrow stored signal atoms")
     r.add_argument("--limit", type=int, default=30, help="Divergent prompt count, 12..60; default 30")
+    variation = r.add_mutually_exclusive_group()
+    variation.add_argument("--fresh", action="store_true", help="Rotate combinations for a new creative session")
+    variation.add_argument("--variation", help="Stable custom variation token for reproducible alternate combinations")
     actions.add_parser("frontier-template", help="Return the contract for the 30-to-10-to-3 novelty tournament")
     r = actions.add_parser("tournament", help="Reject generic repackaging and compare novelty, evidence and execution separately")
     r.add_argument("--file", required=True)
     r.add_argument("--apply", action="store_true", help="Save all hypotheses and rejects as an immutable learning denominator")
+    r.add_argument("--full-only", action="store_true", help="Reject batches that do not meet the full 30→10→3 diversity quotas")
     actions.add_parser("frontier-list", help="List saved exploration hypotheses; these are not validated opportunities")
     r = actions.add_parser("frontier-claims", help="Show one saved hypothesis claim ledger and current evidence changes")
     r.add_argument("--id", required=True)

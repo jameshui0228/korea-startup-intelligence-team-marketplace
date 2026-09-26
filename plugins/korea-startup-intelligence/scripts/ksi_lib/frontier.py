@@ -182,11 +182,19 @@ def _domain_pool(store, observations, count=16):
     return output
 
 
-def frontier_packet(store, topic=None, limit=30):
-    """Build a deterministic divergence packet; never call prompts ideas or evidence."""
+def frontier_packet(store, topic=None, limit=30, variation=None):
+    """Build a divergence packet without calling prompts, ideas or evidence.
+
+    The default ``variation=None`` is intentionally reproducible for review and
+    tests.  A caller can pass a fresh variation token to rotate archetypes,
+    structures and domain pairings so repeated creative sessions do not replay
+    the same 30 combinations.
+    """
     if type(limit) is not int or not 12 <= limit <= 60:
         raise ValueError("frontier limit은 12~60이며 30을 권장합니다.")
     topic = clean(topic, 160) if topic else None
+    variation = clean(variation, 80) if variation else None
+    rotation = int(digest([topic, variation or "stable"])[:8], 16)
     rows = store.observations()
     if topic:
         wanted = _tokens(topic)
@@ -250,9 +258,9 @@ def frontier_packet(store, topic=None, limit=30):
                 (atom["kind"] in MECHANISM_KINDS or atom.get("change_kind") in MECHANISM_KINDS)]
     prompts = []
     for index in range(limit):
-        archetype = ARCHETYPES[index % len(ARCHETYPES)]
-        structure = BUSINESS_STRUCTURES[(index * 3) % len(BUSINESS_STRUCTURES)]
-        atom = anchored[index % len(anchored)] if anchored else None
+        archetype = ARCHETYPES[(index + rotation) % len(ARCHETYPES)]
+        structure = BUSINESS_STRUCTURES[(index * 3 + rotation) % len(BUSINESS_STRUCTURES)]
+        atom = anchored[(index + rotation) % len(anchored)] if anchored else None
         mapped_id = next((domain_id for domain_id in atom["domain_ids"]
                           if domain_id in domain_lookup), None) if atom else None
         explicit_domain = bool(mapped_id)
@@ -262,15 +270,16 @@ def frontier_packet(store, topic=None, limit=30):
         source_domain = (domain_lookup[mapped_id] if mapped_id else
                          {"domain_id": None, "domain": atom.get("topic") or "미분류 신호",
                           "subfield_id": None, "subfield": "원문에서 분야 확인 필요"} if atom else
-                         domains[index % len(domains)])
-        destination = domains[(index * 7 + 5) % len(domains)]
+                         domains[(index + rotation) % len(domains)])
+        destination = domains[(index * 7 + 5 + rotation * 3) % len(domains)]
         if destination["domain_id"] == source_domain["domain_id"]:
-            destination = domains[(index + 1) % len(domains)]
+            destination = domains[(index + rotation + 1) % len(domains)]
         anchor_context = (f"원문 신호 '{atom['title']}' ({atom['event_at']}; {atom['mechanism']})가 "
                           f"{source_domain['domain']}의 행동·비용을 실제 바꾸는지 먼저 확인하라. "
                           if atom else "현재 검토된 최근 원문·분야 연결이 없어 트렌드 가설로 주장하지 말고 조사 리드로만 사용하라. ")
         prompts.append({
-            "prompt_id": "frontier-prompt-" + digest([topic, index, archetype["id"], source_domain, destination])[:16],
+            "prompt_id": "frontier-prompt-" + digest([topic, variation or "stable", index,
+                                                        archetype["id"], source_domain, destination])[:16],
             "archetype": archetype,
             "business_structure": structure,
             "source_domain": source_domain,
@@ -314,6 +323,10 @@ def frontier_packet(store, topic=None, limit=30):
     return {
         "mode": "frontier_divergence_before_validation",
         "topic": topic,
+        "variation": variation or "stable",
+        "variation_note": ("동일 입력을 재현하는 안정 모드입니다. 새 발산 회차는 --fresh 또는 고유 variation을 사용하세요."
+                           if not variation else
+                          "이 회차의 원리·사업구조·분야 조합을 이전 안정 회차와 다르게 회전했습니다."),
         "signal_atoms": atoms,
         "generation_prompts": prompts,
         "tournament_target": {"raw": limit, "semifinal": 10, "shortlist": 3},
@@ -632,7 +645,7 @@ def _pareto(evaluations):
                 row["dominated_by"].append(other["candidate_id"])
 
 
-def evaluate_tournament(store, payload, apply=False):
+def evaluate_tournament(store, payload, apply=False, require_full=False):
     if not isinstance(payload, dict) or not isinstance(payload.get("candidates"), list):
         raise ValueError("tournament에는 candidates 목록이 필요합니다.")
     if not 3 <= len(payload["candidates"]) <= 60:
@@ -702,6 +715,8 @@ def evaluate_tournament(store, payload, apply=False):
         quality_gaps.append("fewer_than_5_business_structures")
     if non_software < 5:
         quality_gaps.append("fewer_than_5_non_software_or_hybrid")
+    if require_full and quality_gaps:
+        raise ValueError("완전한 30→10→3 발산이 필요합니다: " + ", ".join(quality_gaps))
     result = {
         "evaluations": evaluations,
         "shortlist": shortlist,
@@ -713,6 +728,7 @@ def evaluate_tournament(store, payload, apply=False):
                       "non_software_or_hybrid": non_software, "quality_gaps": quality_gaps,
                       "full_tournament": not quality_gaps},
         "saved": False,
+        "full_tournament_required": require_full,
         "boundary": "30→10→3 참신성·시의성 토너먼트이며 시장 검증·선행성·성공확률이 아닙니다.",
     }
     if apply:

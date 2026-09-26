@@ -17,7 +17,7 @@
 
 ## 1. 현재 신호를 주제가 아닌 변화 원자로 바꾸기
 
-`blue-ocean frontier --limit 30 --topic "주제"`를 실행한다. 반환된 `signal_atoms` 중 관심 후보의 원문을 연다.
+`blue-ocean frontier --fresh --limit 30 --topic "주제"`를 실행한다. `--fresh`는 안정 모드에서 이미 본 원리·사업구조·분야 조합이 그대로 반복되는 것을 줄인다. 재현 가능한 비교가 필요하면 `--variation "고유 토큰"`을 사용한다. 반환된 `signal_atoms` 중 관심 후보의 원문을 연다.
 제목·검색 조각만 있는 신호는 리드로만 쓴다. 원문에서 다음을 복원한다.
 
 원문을 실제 읽어 수동 접수할 때는 `change_kind`를 검토자가 확인한 변화 메커니즘으로 선택할 수 있다
@@ -69,7 +69,7 @@
 ## 4. 10→3 토너먼트
 
 `blue-ocean frontier-template`의 계약으로 JSON을 만들고
-`blue-ocean tournament --file FILE`로 미리보기한다. 이 명령은 다음을 별도로 비교한다.
+`blue-ocean tournament --full-only --file FILE`로 미리보기한다. 이 명령은 30개 후보·8개 분야·6개 원리·5개 사업구조·5개 비소프트웨어/하이브리드 쿼터가 채워지지 않으면 완전한 토너먼트로 저장하지 않는다. 탐색 도중 작은 표본을 점검해야 할 때만 `--full-only`를 빼고 결과의 `quality_gaps`를 그대로 보고한다. 이 명령은 다음을 별도로 비교한다.
 
 - novelty_strength: 구조 변화·고객 순간·인과 메커니즘·기존 후보와의 거리.
 - trend_relevance: 날짜가 있는 최근 신호, 120일 이내 읽은 원문, 독립 생산자·신호 계열, 실제 변화 유형. 단순 최근성은 선행성의 증명이 아니다.

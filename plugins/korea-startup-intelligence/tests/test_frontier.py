@@ -89,6 +89,41 @@ class FrontierDiscoveryTest(unittest.TestCase):
         self.assertEqual(packet["generation_prompts"][0]["source_domain"]["domain_id"], "KR-047")
         self.assertEqual(packet["generation_prompts"][0]["trend_anchor_status"], "reviewed_recent_original")
 
+    def test_fresh_variation_rotates_prompt_combinations_without_writing(self):
+        before_batches = len(self.store.records("frontier_batch"))
+        stable = frontier.frontier_packet(self.store, limit=30)
+        fresh = frontier.frontier_packet(self.store, limit=30, variation="creative-session-b")
+        self.assertEqual(stable["variation"], "stable")
+        self.assertEqual(fresh["variation"], "creative-session-b")
+        self.assertNotEqual(
+            [row["prompt_id"] for row in stable["generation_prompts"]],
+            [row["prompt_id"] for row in fresh["generation_prompts"]],
+        )
+        self.assertNotEqual(
+            [row["archetype"]["id"] for row in stable["generation_prompts"]],
+            [row["archetype"]["id"] for row in fresh["generation_prompts"]],
+        )
+        self.assertEqual(before_batches, len(self.store.records("frontier_batch")))
+
+    def test_full_only_rejects_small_or_low_diversity_tournament(self):
+        rows = [
+            self.candidate("full-one", "KR-047", "reverse_trend", "verification_service",
+                           "단종 장비 부품 검증", "중소 제조사 설비 보전 담당자",
+                           "수리 규칙과 부품 정보가 바뀌어 호환 확인 비용이 낮아진다.",
+                           "신제품 공급이 늘수록 단종 장비 유지 책임이 현장으로 이동한다."),
+            self.candidate("full-two", "KR-036", "capacity_market", "managed_service",
+                           "유휴 수리 용량 예약", "지역 수리업체 일정 담당자",
+                           "검증 비용이 낮아져 유휴 장비 시간을 나눌 수 있다.",
+                           "공급량보다 책임과 순서의 불일치가 실제 비용을 만든다."),
+            self.candidate("full-three", "KR-180", "coordination_failure", "outcome_pricing",
+                           "부품 납기 책임 계약", "소규모 제조사 구매 담당자",
+                           "조달 정보가 분리되어 납기 책임을 건별로 계약할 수 있다.",
+                           "재고보다 책임 주체의 불일치가 긴급 납기 비용을 만든다."),
+        ]
+        with self.assertRaisesRegex(ValueError, "완전한 30→10→3"):
+            frontier.evaluate_tournament(self.store, {"batch_key": "full-only", "candidates": rows},
+                                         require_full=True)
+
     def test_tournament_rejects_generic_ai_repackaging(self):
         strong_one = self.candidate(
             "parts-survival-pool", "KR-047", "reverse_trend", "verification_service",

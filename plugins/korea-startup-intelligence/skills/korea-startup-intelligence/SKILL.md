@@ -39,7 +39,7 @@ description: "한국의 약한 시장 신호와 구조 변화를 평범한 재�
    기존 radar 가설이 있으면 prepare의 portfolio_sync를 확인하고, 사용자가 운영을 요청한 현재 워크스페이스에서는
    `blue-ocean sync --apply`로 근거 성격을 보존해 승계한다. founder가 직접 관리한 같은 key는 자동 덮어쓰지 않는다.
    JSON은 Codex가 자연어 요구와 실제 자료로 작성한다. 사용자가 명령·필드명을 외우게 하지 않는다.
-4. 전 분야 탐색은 `signal web-plan`, `blue-ocean run`, `blue-ocean frontier --limit 30`, `market-map --limit 400`, `research-work plan --limit 6`으로 기존 후보·조사 공백·다음 행동을 파악한다.
+4. 전 분야 탐색은 `signal web-plan`, `blue-ocean run`, `blue-ocean frontier --limit 30`, `market-map --limit 400`, `research-work plan --limit 6`으로 기존 후보·조사 공백·다음 행동을 파악한다. 같은 주제를 다시 발산할 때는 `blue-ocean frontier --fresh --limit 30` 또는 고유 `--variation`을 사용해 이전 조합을 반복하지 않는다.
    특정 아이디어/서류 요청은 관련 기록만 읽어 바로 해당 산출물을 개선한다. 매번 전 분야를 다시 조사하지 않는다.
 5. 최신 시장·공고가 필요하면 현재 환경의 공개 웹 검색/공식 페이지 열람 또는 사용자 제공 자료를 사용한다.
    현재 사용할 수 있는 무키 수집원은 `refresh --topic "핵심 검색어"`로 보완할 수 있으나 API 연결은 선행 조건이 아니다.
@@ -49,7 +49,7 @@ description: "한국의 약한 시장 신호와 구조 변화를 평범한 재�
 
 사용자 자연어 요청은 다음처럼 연결한다. “오늘의 블루오션”은 `blue-ocean run --topic "요청 주제"`의 공개 웹 계획을 따라 Codex가 원문을 실제 열고, 검토 자료를 `signal batch-import`로 저장한 뒤 포트폴리오 재평가·변화 브리핑까지 현재 요청 안에서 마친다. 명령 하나만 실행하고 아이디어가 생성됐다고 끝내지 않는다. “내 아이디어 관리 시작”은 `blue-ocean onboard`에서 가장 중요한 설정을 확인하고 후보별 `operator package --id ID --apply`로 인터뷰/MVP/가격/GTM의 로컬 작업을 만든다. “이번 주 다음 행동”은 `blue-ocean next`, `operator overview`, `operator weekly`를 결합하되 외부 행동은 승인·실행·결과를 분리한다. `blue-ocean prepare --no-refresh`는 저장 자료 재검토에 쓴다.
 “평범하지 않은/참신한/혁신적인/트렌드를 앞서는 아이디어”는 [프런티어 발견](references/frontier-discovery.md)을 읽고
-`blue-ocean frontier --limit 30`으로 시작한다. Codex가 원문을 열어 30개를 발산한 뒤 `blue-ocean tournament`로 10개와 3개를 나눈다.
+`blue-ocean frontier --fresh --limit 30`으로 시작한다. Codex가 원문을 열어 30개를 발산한 뒤 `blue-ocean tournament --full-only`로 10개와 3개를 나눈다. `--full-only`가 거부되면 후보 수·분야·원리·사업구조·비소프트웨어 쿼터를 먼저 채우며, 작은 후보 묶음을 완전한 탐색으로 보고하지 않는다.
 단순 AI·통합 플랫폼 재포장을 참신한 후보로 보여 주지 않으며, 근거가 약한 대담한 후보는 숨기지 않고 Frontier로 표시한다.
 후보마다 `why_now`를 사건일이 있는 원문에 연결하고, 오래된 재인용/메타데이터만 있으면 현재 트렌드로 승격하지 않는다.
 새 후보에는 고객·문제·지불자·현재 대안·구조 변화·지금인 이유·한국 진입점별 `claims`를 넣는다. 각 주장에 `FACT/INFERENCE/ASSUMPTION/UNKNOWN`, `supports/contradicts/context`, 근거 성격·원문 위치·불확실성·다음 확인을 기록한다. 기존 blue-ocean/dossier 후보의 `assessments`·`signal_profile`도 같은 원문·검토·해석 서명으로 재검토하며, 과거 미서명 링크는 자동 지지로 계산하지 않는다. 판매자 홍보는 고객 지불의 증거가 아니며, 오래되거나 재해석된 링크와 최근 변화 메커니즘이 없는 원문은 강한 등급을 막는다. 저장된 가설의 현재 장부와 판단 변화는 `blue-ocean frontier-claims --id ID` 또는 `blue-ocean frontier-list`로 먼저 확인하고, 기존 후보는 `blue-ocean status`를 확인한다.
