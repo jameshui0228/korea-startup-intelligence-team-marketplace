@@ -1,0 +1,8 @@
+{
+  "demo": "offline_empty_workspace",
+  "mode": "frontier_divergence_before_validation",
+  "generated_research_prompts": 30,
+  "reviewed_sources": 0,
+  "all_prompts_unanchored": true,
+  "meaning": "조사 질문을 생성했습니다. 원문 검토나 시장성 검증을 완료한 결과가 아닙니다."
+}
