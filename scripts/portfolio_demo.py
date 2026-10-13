@@ -34,7 +34,7 @@ def main():
             "generated_research_prompts": len(prompts),
             "reviewed_sources": coverage["reviewed_atoms"],
             "all_prompts_unanchored": True,
-            "meaning": "조사 질문을 생성했습니다. 원문 검토나 시장성 검증을 완료한 결과가 아닙니다.",
+            "meaning": "Research questions generated. No original sources have been reviewed and no market opportunity has been validated.",
         }, ensure_ascii=False, indent=2))
 
 
